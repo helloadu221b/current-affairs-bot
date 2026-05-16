@@ -1,0 +1,17 @@
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+
+BOT_TOKEN = "PASTE_YOUR_BOT_TOKEN_HERE"
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("✅ Bot is working!")
+
+
+app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+app.add_handler(MessageHandler(filters.ALL, handle_message))
+
+print("🚀 Bot is running...")
+
+app.run_pollin
