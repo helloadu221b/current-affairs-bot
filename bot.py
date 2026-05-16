@@ -164,8 +164,7 @@ async def auto_post(app):
                     json.dump(archive, f, ensure_ascii=False, indent=2)
 
                 revision_text = (
-                    f"♻️ *REVISION NEWS*\n"
-                    f"🔁 Revision #{old_post['revision_count']}\n\n"
+                    f"♻️ *REVISION NEWS*\n\n"
                     + old_post["content"]
                 )
 
