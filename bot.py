@@ -113,75 +113,88 @@ async def auto_post(app):
 
     while True:
 
-        # LOAD QUEUE
-        with open("queue.json", "r", encoding="utf-8") as f:
-            queue = json.load(f)
+        try:
 
-        # IF QUEUE HAS POSTS
-        if queue:
+            # LOAD QUEUE
+            with open("queue.json", "r", encoding="utf-8") as f:
+                queue = json.load(f)
 
-            # TAKE FIRST POST
-            post = queue.pop(0)
+            print(f"📰 Queue size: {len(queue)}")
 
-            # SEND TO CHANNEL
-            await app.bot.send_message(
-                chat_id=CHANNEL_ID,
-                text=post["content"],
-                parse_mode="Markdown"
-            )
+            # IF QUEUE HAS POSTS
+            if queue:
 
-            print(f"✅ Posted: {post['id']}")
+                # TAKE FIRST POST
+                post = queue.pop(0)
 
-            # SAVE UPDATED QUEUE
-            with open("queue.json", "w", encoding="utf-8") as f:
-                json.dump(queue, f, ensure_ascii=False, indent=2)
-
-            # WAIT 20 MINUTES
-            await asyncio.sleep(1200)
-
-        else:
-
-            print("♻️ Queue empty, starting revision mode")
-
-            # LOAD ARCHIVE
-            with open("archive.json", "r", encoding="utf-8") as f:
-                archive = json.load(f)
-
-            # IF ARCHIVE HAS NEWS
-            if archive:
-
-                # ROTATE ARCHIVE
-                old_post = archive.pop(0)
-
-                # INCREASE REVISION COUNT
-                old_post["revision_count"] += 1
-
-                # PUT BACK AT END
-                archive.append(old_post)
-
-                # SAVE UPDATED ARCHIVE
-                with open("archive.json", "w", encoding="utf-8") as f:
-                    json.dump(archive, f, ensure_ascii=False, indent=2)
-
-                revision_text = (
-                    f"♻️ *REVISION NEWS*\n\n"
-                    + old_post["content"]
-                )
-
+                # SEND TO CHANNEL
                 await app.bot.send_message(
                     chat_id=CHANNEL_ID,
-                    text=revision_text,
+                    text=post["content"],
                     parse_mode="Markdown"
                 )
 
-                print(f"♻️ Posted revision: {old_post['id']}")
+                print(f"✅ Posted: {post['id']}")
+
+                # SAVE UPDATED QUEUE
+                with open("queue.json", "w", encoding="utf-8") as f:
+                    json.dump(queue, f, ensure_ascii=False, indent=2)
+
+                # WAIT 20 MINUTES
+                await asyncio.sleep(1200)
 
             else:
 
-                print("⚠️ Archive empty")
+                print("♻️ Queue empty, starting revision mode")
 
-            # WAIT 20 MINUTES
-            await asyncio.sleep(1200)
+                # LOAD ARCHIVE
+                with open("archive.json", "r", encoding="utf-8") as f:
+                    archive = json.load(f)
+
+                print(f"📦 Archive size: {len(archive)}")
+
+                # IF ARCHIVE HAS NEWS
+                if archive:
+
+                    # ROTATE ARCHIVE
+                    old_post = archive.pop(0)
+
+                    # INCREASE REVISION COUNT
+                    old_post["revision_count"] += 1
+
+                    # PUT BACK AT END
+                    archive.append(old_post)
+
+                    # SAVE UPDATED ARCHIVE
+                    with open("archive.json", "w", encoding="utf-8") as f:
+                        json.dump(archive, f, ensure_ascii=False, indent=2)
+
+                    revision_text = (
+                        f"♻️ *REVISION NEWS*\n\n"
+                        + old_post["content"]
+                    )
+
+                    await app.bot.send_message(
+                        chat_id=CHANNEL_ID,
+                        text=revision_text,
+                        parse_mode="Markdown"
+                    )
+
+                    print(f"♻️ Posted revision: {old_post['id']}")
+
+                else:
+
+                    print("⚠️ Archive empty")
+
+                # WAIT 20 MINUTES
+                await asyncio.sleep(1200)
+
+        except Exception as e:
+
+            print(f"❌ AUTO POST ERROR: {e}")
+
+            # WAIT 30 SECONDS BEFORE RETRY
+            await asyncio.sleep(30)
 
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
