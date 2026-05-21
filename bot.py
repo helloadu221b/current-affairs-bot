@@ -9,9 +9,9 @@ from telegram.ext import (
     filters,
 )
 
-BOT_TOKEN = "8935035246:AAG2uZfeGfuRAj6ImYZMW0says8bPy2zUs4"
+BOT_TOKEN = "8748070088:AAG2zR3RoY6S1QIpmvBo-cV0vpA5dtIbNig"
 
-CHANNEL_ID = "@newsofexams"
+CHANNEL_ID = "@affairsmcq"
 
 
 # RECEIVE JSON FILE
