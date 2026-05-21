@@ -491,23 +491,62 @@ async def auto_post(app):
 
 
 # ─────────────────────────────────────────
-# POLL FORMAT FOR MCQ (feature 21)
+# POLL FORMAT FOR MCQ
 # ─────────────────────────────────────────
 
 async def post_as_poll(bot, item):
     options = item["options"]
+
+    # FIND WHICH OPTION IS CORRECT (match by starting letter e.g. "D)")
     correct_index = next(
         (i for i, o in enumerate(options) if o.startswith(item["answer"][0])),
         0
     )
+
+    # STRIP "A) " PREFIX FROM OPTIONS FOR TELEGRAM POLL
+    clean_options = [o[3:].strip() if len(o) > 3 else o for o in options]
+
     await bot.send_poll(
         chat_id=CHANNEL_ID,
         question=item["question"][:300],
-        options=[o[3:].strip() for o in options],
+        options=clean_options,
         type="quiz",
         correct_option_id=correct_index,
         explanation=item.get("explanation", "")[:200],
         is_anonymous=True
+    )
+
+
+async def cmd_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    queue = load_json("queue.json")
+
+    # FIND THE NEXT MCQ IN QUEUE
+    mcq_index = next(
+        (i for i, item in enumerate(queue) if item.get("type") == "mcq"),
+        None
+    )
+
+    if mcq_index is None:
+        await update.message.reply_text("❌ No MCQ found in the queue.")
+        return
+
+    # REMOVE FROM QUEUE AND POST AS POLL
+    item = queue.pop(mcq_index)
+    await post_as_poll(context.bot, item)
+    save_json("queue.json", queue)
+
+    global posts_sent, last_posted
+    posts_sent  += 1
+    last_posted  = item["id"]
+
+    await update.message.reply_text(
+        f"✅ Posted MCQ *{item['id']}* as a quiz poll!",
+        parse_mode="Markdown"
     )
 
 
@@ -532,6 +571,7 @@ app.add_handler(CommandHandler("confirmclear", cmd_confirmclear))
 app.add_handler(CommandHandler("cancel",       cmd_cancel))
 app.add_handler(CommandHandler("setinterval",  cmd_setinterval))
 app.add_handler(CommandHandler("revision",     cmd_revision))
+app.add_handler(CommandHandler("poll",         cmd_poll))
 
 # DAILY REPORT — every day at 11 PM
 app.job_queue.run_daily(
