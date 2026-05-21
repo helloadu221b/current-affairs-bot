@@ -49,35 +49,6 @@ def save_json(filename, data):
 # ─────────────────────────────────────────
 
 def format_news(item, label="📰 TODAY NEWS"):
-    # NEW STRUCTURED FORMAT (has "title" field)
-    if "title" in item:
-        facts = item.get("facts", [])
-        facts_text = "\n".join(f"▪️ {f}" for f in facts) if facts else ""
-
-        parts = [f"*{label}*\n"]
-        parts.append(f"🏛️ *{item['title']}*\n")
-
-        if item.get("who"):
-            parts.append(f"👤 *Who →* {item['who']}")
-        if item.get("what"):
-            parts.append(f"📋 *What →* {item['what']}")
-        if item.get("where"):
-            parts.append(f"📍 *Where →* {item['where']}")
-        if item.get("purpose"):
-            parts.append(f"🎯 *Purpose →* {item['purpose']}")
-
-        if facts_text:
-            parts.append(f"\n📌 *Important Facts*\n{facts_text}")
-
-        if item.get("exam_angle"):
-            parts.append(f"\n⚠️ *Exam Angle →* {item['exam_angle']}")
-
-        if item.get("hashtags"):
-            parts.append(f"\n{item['hashtags']}")
-
-        return "\n".join(parts)
-
-    # OLD RAW FORMAT (has "content" field) — kept for backward compatibility
     return f"*{label}*\n\n" + item["content"]
 
 
