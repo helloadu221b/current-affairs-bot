@@ -37,3 +37,4 @@ run = ["python", "bot.py"]
 
 [userenv.shared]
 CHANNEL_ID = "@affairsmcq"
+ADMIN_ID = "626613710"

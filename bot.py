@@ -1,54 +1,33 @@
 import json
 import asyncio
 import os
+from datetime import datetime, timezone
 
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
+    CommandHandler,
     MessageHandler,
     ContextTypes,
     filters,
 )
 
-BOT_TOKEN = os.environ["BOT_TOKEN"]
+BOT_TOKEN  = os.environ["BOT_TOKEN"]
 CHANNEL_ID = os.environ["CHANNEL_ID"]
+ADMIN_ID   = int(os.environ["ADMIN_ID"])
 
+# POSTING SCHEDULE (24h format, local server time)
+POST_HOUR_START = 4   # 4 AM
+POST_HOUR_END   = 22  # 10 PM
 
-# ─────────────────────────────────────────
-# FORMAT HELPERS
-# ─────────────────────────────────────────
+# INTERVAL BETWEEN POSTS (seconds) — changeable via /setinterval
+POST_INTERVAL = 1200  # 20 minutes
 
-def format_news(item):
-    return item["content"]
-
-
-def format_mcq(item):
-    options_text = "\n".join(item["options"])
-    text = (
-        f"❓ *QUESTION*\n\n"
-        f"{item['question']}\n\n"
-        f"{options_text}\n\n"
-        f"✅ *Answer:* {item['answer']}\n\n"
-        f"📝 {item['explanation']}"
-    )
-    return text
-
-
-def detect_type(item):
-    if "question" in item:
-        return "mcq"
-    return "news"
-
-
-def format_post(item):
-    if item.get("type") == "mcq":
-        return format_mcq(item)
-    return format_news(item)
-
-
-def get_parse_mode(item):
-    # MCQ and news both use standard Markdown
-    return "Markdown"
+# RUNTIME STATE
+paused      = False
+start_time  = datetime.now(timezone.utc)
+posts_sent  = 0
+last_posted = None
 
 
 # ─────────────────────────────────────────
@@ -66,10 +45,66 @@ def save_json(filename, data):
 
 
 # ─────────────────────────────────────────
+# FORMAT HELPERS
+# ─────────────────────────────────────────
+
+def format_news(item):
+    return item["content"]
+
+
+def format_mcq(item):
+    options_text = "\n".join(item["options"])
+    return (
+        f"❓ *QUESTION*\n\n"
+        f"{item['question']}\n\n"
+        f"{options_text}\n\n"
+        f"✅ *Answer:* {item['answer']}\n\n"
+        f"📝 {item['explanation']}"
+    )
+
+
+def detect_type(item):
+    if "question" in item:
+        return "mcq"
+    return "news"
+
+
+def format_post(item):
+    if item.get("type") == "mcq":
+        return format_mcq(item)
+    return format_news(item)
+
+
+# ─────────────────────────────────────────
+# ADMIN CHECK
+# ─────────────────────────────────────────
+
+def is_admin(update: Update) -> bool:
+    return update.effective_user.id == ADMIN_ID
+
+
+async def deny(update: Update):
+    await update.message.reply_text("⛔ You are not authorized to use this command.")
+
+
+# ─────────────────────────────────────────
+# SCHEDULE CHECK
+# ─────────────────────────────────────────
+
+def within_posting_hours() -> bool:
+    hour = datetime.now().hour
+    return POST_HOUR_START <= hour < POST_HOUR_END
+
+
+# ─────────────────────────────────────────
 # FILE UPLOAD HANDLER
 # ─────────────────────────────────────────
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
 
     document = update.message.document
     if not document:
@@ -81,14 +116,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await file.download_to_drive(file_name)
 
     new_items = load_json(file_name)
-    queue = load_json("queue.json")
-    archive = load_json("archive.json")
+    queue     = load_json("queue.json")
+    archive   = load_json("archive.json")
 
     added = []
 
     for item in new_items:
 
-        # SKIP DUPLICATES
+        # SKIP DUPLICATES (check content or question)
         is_duplicate = any(
             existing.get("content") == item.get("content") and
             existing.get("question") == item.get("question")
@@ -99,11 +134,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("⚠️ Duplicate skipped")
             continue
 
-        # SET METADATA
-        item["type"] = detect_type(item)
-        item["id"] = f"POST_{len(archive) + len(added) + 1}"
+        item["type"]           = detect_type(item)
+        item["id"]             = f"POST_{len(archive) + len(added) + 1}"
         item["revision_count"] = 0
-
         added.append(item)
 
     queue_was_empty = len(queue) == 0
@@ -114,20 +147,262 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json("queue.json", queue)
     save_json("archive.json", archive)
 
-    # INSTANT FIRST POST IF QUEUE WAS EMPTY
-    if queue_was_empty and added:
+    # PREVIEW FIRST ITEM BEFORE ADDING
+    if added:
+        preview_text = (
+            f"👁 *Preview of first item:*\n\n"
+            + format_post(added[0])
+        )
+        await update.message.reply_text(preview_text, parse_mode="Markdown")
+
+    # INSTANT FIRST POST IF QUEUE WAS EMPTY AND IN HOURS
+    if queue_was_empty and added and within_posting_hours() and not paused:
         first = queue.pop(0)
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
             text=format_post(first),
             parse_mode="Markdown"
         )
-        print(f"✅ Instantly posted: {first['id']}")
         save_json("queue.json", queue)
+        global posts_sent, last_posted
+        posts_sent  += 1
+        last_posted  = first["id"]
+        print(f"✅ Instantly posted: {first['id']}")
 
     await update.message.reply_text(
-        f"✅ {len(added)} new posts added to queue!"
+        f"✅ *{len(added)} new posts added to queue!*\n"
+        f"⏭ Duplicates skipped: {len(new_items) - len(added)}",
+        parse_mode="Markdown"
     )
+
+
+# ─────────────────────────────────────────
+# COMMANDS
+# ─────────────────────────────────────────
+
+async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    queue   = load_json("queue.json")
+    archive = load_json("archive.json")
+
+    uptime_seconds = (datetime.now(timezone.utc) - start_time).seconds
+    hours, rem     = divmod(uptime_seconds, 3600)
+    minutes, _     = divmod(rem, 60)
+
+    status_text = (
+        f"📊 *BOT STATUS*\n\n"
+        f"▶️ State: {'⏸ Paused' if paused else '✅ Running'}\n"
+        f"📰 Queue: {len(queue)} posts\n"
+        f"📦 Archive: {len(archive)} posts\n"
+        f"✅ Posts sent this session: {posts_sent}\n"
+        f"🕐 Last posted: {last_posted or 'None'}\n"
+        f"⏱ Uptime: {hours}h {minutes}m\n"
+        f"⏰ Posting hours: {POST_HOUR_START}:00 AM – {POST_HOUR_END}:00 PM\n"
+        f"🕒 Interval: {POST_INTERVAL // 60} minutes\n"
+        f"🟢 Within hours: {'Yes' if within_posting_hours() else 'No'}"
+    )
+
+    await update.message.reply_text(status_text, parse_mode="Markdown")
+
+
+async def cmd_pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    global paused
+    paused = True
+    await update.message.reply_text("⏸ Bot paused. Posts will not be sent until resumed.")
+
+
+async def cmd_resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    global paused
+    paused = False
+    await update.message.reply_text("▶️ Bot resumed. Posting will continue.")
+
+
+async def cmd_next(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    queue = load_json("queue.json")
+
+    if not queue:
+        await update.message.reply_text("❌ Queue is empty, nothing to post.")
+        return
+
+    post = queue.pop(0)
+    await context.bot.send_message(
+        chat_id=CHANNEL_ID,
+        text=format_post(post),
+        parse_mode="Markdown"
+    )
+    save_json("queue.json", queue)
+
+    global posts_sent, last_posted
+    posts_sent  += 1
+    last_posted  = post["id"]
+
+    await update.message.reply_text(f"✅ Force posted: *{post['id']}*", parse_mode="Markdown")
+
+
+async def cmd_skip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    queue = load_json("queue.json")
+
+    if not queue:
+        await update.message.reply_text("❌ Queue is empty, nothing to skip.")
+        return
+
+    skipped = queue.pop(0)
+    save_json("queue.json", queue)
+    await update.message.reply_text(f"⏭ Skipped: *{skipped['id']}*", parse_mode="Markdown")
+
+
+async def cmd_queue(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    queue = load_json("queue.json")
+
+    if not queue:
+        await update.message.reply_text("📭 Queue is empty.")
+        return
+
+    lines = [f"📋 *Queue ({len(queue)} items):*\n"]
+    for i, item in enumerate(queue[:20], 1):
+        label = item.get("question", item.get("content", ""))[:60]
+        lines.append(f"{i}. [{item['type'].upper()}] {label}...")
+
+    if len(queue) > 20:
+        lines.append(f"\n...and {len(queue) - 20} more.")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    # STORE PENDING CONFIRMATION
+    context.user_data["awaiting_clear_confirm"] = True
+    await update.message.reply_text(
+        "⚠️ Are you sure you want to clear the entire queue?\n\nReply /confirmclear to confirm or /cancel to abort."
+    )
+
+
+async def cmd_confirmclear(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    if not context.user_data.get("awaiting_clear_confirm"):
+        await update.message.reply_text("Nothing to confirm.")
+        return
+
+    queue = load_json("queue.json")
+    count = len(queue)
+    save_json("queue.json", [])
+    context.user_data["awaiting_clear_confirm"] = False
+    await update.message.reply_text(f"🗑 Queue cleared! {count} posts removed.")
+
+
+async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["awaiting_clear_confirm"] = False
+    await update.message.reply_text("✅ Cancelled.")
+
+
+async def cmd_setinterval(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /setinterval <minutes>\nExample: /setinterval 30")
+        return
+
+    try:
+        minutes = int(context.args[0])
+        if minutes < 1:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("❌ Please provide a valid number of minutes (minimum 1).")
+        return
+
+    global POST_INTERVAL
+    POST_INTERVAL = minutes * 60
+    await update.message.reply_text(f"✅ Posting interval set to *{minutes} minutes*.", parse_mode="Markdown")
+
+
+async def cmd_revision(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    archive = load_json("archive.json")
+
+    if not archive:
+        await update.message.reply_text("📭 Archive is empty.")
+        return
+
+    sorted_archive = sorted(archive, key=lambda x: x.get("revision_count", 0), reverse=True)
+    top = sorted_archive[:10]
+
+    lines = ["📈 *Top Revised Posts:*\n"]
+    for i, item in enumerate(top, 1):
+        label = item.get("question", item.get("content", ""))[:50]
+        lines.append(f"{i}. [{item['id']}] revised {item['revision_count']}x — {label}...")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+# ─────────────────────────────────────────
+# DAILY REPORT
+# ─────────────────────────────────────────
+
+async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
+
+    queue   = load_json("queue.json")
+    archive = load_json("archive.json")
+
+    report = (
+        f"📅 *DAILY REPORT*\n\n"
+        f"✅ Posts sent today: {posts_sent}\n"
+        f"📰 Queue remaining: {len(queue)}\n"
+        f"📦 Archive total: {len(archive)}\n"
+        f"⏰ Posting hours: {POST_HOUR_START}:00 AM – {POST_HOUR_END}:00 PM\n"
+        f"🕒 Interval: {POST_INTERVAL // 60} minutes"
+    )
+
+    await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=report,
+        parse_mode="Markdown"
+    )
+    print("📅 Daily report sent to admin")
 
 
 # ─────────────────────────────────────────
@@ -136,9 +411,23 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def auto_post(app):
 
+    global posts_sent, last_posted, POST_INTERVAL
+
     while True:
 
         try:
+
+            # RESPECT POSTING HOURS
+            if not within_posting_hours():
+                print(f"🌙 Outside posting hours ({POST_HOUR_START}:00–{POST_HOUR_END}:00), sleeping 60s")
+                await asyncio.sleep(60)
+                continue
+
+            # RESPECT PAUSE
+            if paused:
+                print("⏸ Bot is paused, sleeping 60s")
+                await asyncio.sleep(60)
+                continue
 
             queue = load_json("queue.json")
             print(f"📰 Queue size: {len(queue)}")
@@ -154,10 +443,12 @@ async def auto_post(app):
                 )
                 print(f"✅ Posted: {post['id']}")
                 save_json("queue.json", queue)
+                posts_sent  += 1
+                last_posted  = post["id"]
 
             else:
 
-                # REVISION MODE — REPOST FROM ARCHIVE
+                # REVISION MODE
                 print("♻️ Queue empty, starting revision mode")
                 archive = load_json("archive.json")
                 print(f"📦 Archive size: {len(archive)}")
@@ -177,16 +468,47 @@ async def auto_post(app):
                         parse_mode="Markdown"
                     )
                     print(f"♻️ Posted revision: {old_post['id']}")
+                    posts_sent  += 1
+                    last_posted  = old_post["id"]
 
                 else:
                     print("⚠️ Archive is empty")
 
-            # WAIT 20 MINUTES
-            await asyncio.sleep(1200)
+            # ALERT ADMIN IF ERROR SENDS FAIL
+            await asyncio.sleep(POST_INTERVAL)
 
         except Exception as e:
             print(f"❌ AUTO POST ERROR: {e}")
+            try:
+                await app.bot.send_message(
+                    chat_id=ADMIN_ID,
+                    text=f"❌ *Bot Error:*\n`{e}`",
+                    parse_mode="Markdown"
+                )
+            except Exception:
+                pass
             await asyncio.sleep(30)
+
+
+# ─────────────────────────────────────────
+# POLL FORMAT FOR MCQ (feature 21)
+# ─────────────────────────────────────────
+
+async def post_as_poll(bot, item):
+    options = item["options"]
+    correct_index = next(
+        (i for i, o in enumerate(options) if o.startswith(item["answer"][0])),
+        0
+    )
+    await bot.send_poll(
+        chat_id=CHANNEL_ID,
+        question=item["question"][:300],
+        options=[o[3:].strip() for o in options],
+        type="quiz",
+        correct_option_id=correct_index,
+        explanation=item.get("explanation", "")[:200],
+        is_anonymous=True
+    )
 
 
 # ─────────────────────────────────────────
@@ -195,8 +517,29 @@ async def auto_post(app):
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+# FILE HANDLER
 app.add_handler(MessageHandler(filters.ATTACHMENT, handle_document))
 
+# COMMANDS
+app.add_handler(CommandHandler("status",       cmd_status))
+app.add_handler(CommandHandler("pause",        cmd_pause))
+app.add_handler(CommandHandler("resume",       cmd_resume))
+app.add_handler(CommandHandler("next",         cmd_next))
+app.add_handler(CommandHandler("skip",         cmd_skip))
+app.add_handler(CommandHandler("queue",        cmd_queue))
+app.add_handler(CommandHandler("clear",        cmd_clear))
+app.add_handler(CommandHandler("confirmclear", cmd_confirmclear))
+app.add_handler(CommandHandler("cancel",       cmd_cancel))
+app.add_handler(CommandHandler("setinterval",  cmd_setinterval))
+app.add_handler(CommandHandler("revision",     cmd_revision))
+
+# DAILY REPORT — every day at 11 PM
+app.job_queue.run_daily(
+    send_daily_report,
+    time=datetime.now().replace(hour=23, minute=0, second=0).time()
+)
+
+# AUTO POST LOOP
 app.job_queue.run_once(
     lambda context: asyncio.create_task(auto_post(app)),
     when=1
