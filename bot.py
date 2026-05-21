@@ -1,5 +1,6 @@
 import json
 import asyncio
+import os
 
 from telegram import Update
 from telegram.ext import (
@@ -9,7 +10,7 @@ from telegram.ext import (
     filters,
 )
 
-BOT_TOKEN = "8748070088:AAG2zR3RoY6S1QIpmvBo-cV0vpA5dtIbNig"
+BOT_TOKEN = os.environ["BOT_TOKEN"]
 
 CHANNEL_ID = "@affairsmcq"
 
