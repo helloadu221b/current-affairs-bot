@@ -2,5 +2,9 @@
   {
     "id": "@affairsmcq",
     "active": true
+  },
+  {
+    "id": "@newsofexams",
+    "active": true
   }
 ]

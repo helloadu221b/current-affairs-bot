@@ -125,5 +125,33 @@
     "type": "mcq",
     "id": "POST_16",
     "revision_count": 0
+  },
+  {
+    "question": "Which Small Finance Bank inaugurated India's first AI-powered 'phygital' banking branch in Guwahati?",
+    "options": [
+      "AU Small Finance Bank",
+      "Equitas Small Finance Bank",
+      "Slice Small Finance Bank",
+      "Capital Small Finance Bank"
+    ],
+    "correct_option_index": 2,
+    "explanation": "Assam CM inaugurated India's 1st AI phygital branch of Slice SFB in Guwahati, featuring self-service kiosks and paperless cash transactions. #17May2026",
+    "type": "mcq",
+    "id": "POST_17",
+    "revision_count": 0
+  },
+  {
+    "question": "Who was appointed as the Chairperson of the Committee on Empowerment of Women by Lok Sabha Speaker Om Birla?",
+    "options": [
+      "Smt. Droupadi Murmu",
+      "Dr. Daggubati Purandeswari",
+      "Smt. Nirmala Sitharaman",
+      "Smt. Smriti Irani"
+    ],
+    "correct_option_index": 1,
+    "explanation": "Om Birla formed a 28-member panel on Women Empowerment chaired by MP Dr. Daggubati Purandeswari to strengthen welfare mechanisms. #17May2026",
+    "type": "mcq",
+    "id": "POST_18",
+    "revision_count": 0
   }
 ]
