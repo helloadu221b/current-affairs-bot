@@ -150,11 +150,7 @@ async def process_new_items(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     # INSTANT FIRST POST IF QUEUE WAS EMPTY AND IN HOURS
     if queue_was_empty and added and within_posting_hours() and not paused:
         first = queue.pop(0)
-        await context.bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=format_post(first),
-            parse_mode="Markdown"
-        )
+        await send_item(context.bot, first)
         save_json("queue.json", queue)
         global posts_sent, last_posted
         posts_sent  += 1
@@ -360,11 +356,7 @@ async def cmd_next(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     post = queue.pop(0)
-    await context.bot.send_message(
-        chat_id=CHANNEL_ID,
-        text=format_post(post),
-        parse_mode="Markdown"
-    )
+    await send_item(context.bot, post)
     save_json("queue.json", queue)
 
     global posts_sent, last_posted
@@ -552,11 +544,7 @@ async def auto_post(app):
 
                 # POST NEXT ITEM FROM QUEUE
                 post = queue.pop(0)
-                await app.bot.send_message(
-                    chat_id=CHANNEL_ID,
-                    text=format_post(post),
-                    parse_mode="Markdown"
-                )
+                await send_item(app.bot, post)
                 print(f"✅ Posted: {post['id']}")
                 save_json("queue.json", queue)
                 posts_sent  += 1
@@ -607,30 +595,34 @@ async def auto_post(app):
 
 
 # ─────────────────────────────────────────
-# POLL FORMAT FOR MCQ
+# SEND HELPER — auto picks poll or message
 # ─────────────────────────────────────────
 
-async def post_as_poll(bot, item):
-    options = item["options"]
-
-    # FIND WHICH OPTION IS CORRECT (match by starting letter e.g. "D)")
-    correct_index = next(
-        (i for i, o in enumerate(options) if o.startswith(item["answer"][0])),
-        0
-    )
-
-    # STRIP "A) " PREFIX FROM OPTIONS FOR TELEGRAM POLL
-    clean_options = [o[3:].strip() if len(o) > 3 else o for o in options]
-
-    await bot.send_poll(
-        chat_id=CHANNEL_ID,
-        question=item["question"][:300],
-        options=clean_options,
-        type="quiz",
-        correct_option_id=correct_index,
-        explanation=item.get("explanation", "")[:200],
-        is_anonymous=True
-    )
+async def send_item(bot, item, label=None):
+    if item.get("type") == "mcq":
+        # MCQ → always send as Telegram quiz poll
+        options = item["options"]
+        correct_index = next(
+            (i for i, o in enumerate(options) if o.startswith(item["answer"][0])),
+            0
+        )
+        clean_options = [o[3:].strip() if len(o) > 3 else o for o in options]
+        await bot.send_poll(
+            chat_id=CHANNEL_ID,
+            question=item["question"][:300],
+            options=clean_options,
+            type="quiz",
+            correct_option_id=correct_index,
+            explanation=item.get("explanation", "")[:200],
+            is_anonymous=True
+        )
+    else:
+        # NEWS → send as text message
+        await bot.send_message(
+            chat_id=CHANNEL_ID,
+            text=format_post(item, label=label),
+            parse_mode="Markdown"
+        )
 
 
 async def cmd_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
