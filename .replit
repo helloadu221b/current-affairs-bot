@@ -32,3 +32,8 @@ outputType = "console"
 [deployment]
 deploymentTarget = "vm"
 run = ["python", "bot.py"]
+
+[userenv]
+
+[userenv.shared]
+CHANNEL_ID = "@affairsmcq"

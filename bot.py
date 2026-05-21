@@ -11,7 +11,7 @@ from telegram.ext import (
 )
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-CHANNEL_ID = "@affairsmcq"
+CHANNEL_ID = os.environ["CHANNEL_ID"]
 
 
 # ─────────────────────────────────────────

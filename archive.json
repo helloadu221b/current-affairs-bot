@@ -1,10 +1,5 @@
 [
   {
-    "content": "🏦 *BANKING | RBI Launches Financial Awareness Campaign*\n\n🔹 RBI started a nationwide financial literacy campaign\n🔹 Focus areas → digital banking & fraud prevention\n\n📌 *Exam Note:* RBI Headquarters → Mumbai\n\n#RBI #BankingAwareness",
-    "id": "NEWS_1",
-    "revision_count": 4
-  },
-  {
     "content": "📈 *ECONOMY | India’s GDP Growth Projected at 7%*\n\n🔹 IMF projected India’s GDP growth at 7% for FY 2026\n🔹 India remains fastest-growing major economy\n\n📌 *Static GK:* IMF HQ → Washington D.C.\n\n#GDP #Economy",
     "id": "NEWS_2",
     "revision_count": 4
@@ -48,5 +43,10 @@
     "content": "👤 *APPOINTMENTS | New SEBI Chairperson Appointed*\n\n🔹 Government appointed a new Chairperson of SEBI\n🔹 SEBI regulates securities market in India\n\n📌 *Exam Note:* SEBI Headquarters → Mumbai\n\n#SEBI #Appointments",
     "id": "NEWS_10",
     "revision_count": 4
+  },
+  {
+    "content": "🏦 *BANKING | RBI Launches Financial Awareness Campaign*\n\n🔹 RBI started a nationwide financial literacy campaign\n🔹 Focus areas → digital banking & fraud prevention\n\n📌 *Exam Note:* RBI Headquarters → Mumbai\n\n#RBI #BankingAwareness",
+    "id": "NEWS_1",
+    "revision_count": 5
   }
 ]
