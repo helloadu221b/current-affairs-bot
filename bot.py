@@ -97,29 +97,14 @@ def within_posting_hours() -> bool:
 
 
 # ─────────────────────────────────────────
-# FILE UPLOAD HANDLER
+# SHARED: PROCESS & ADD ITEMS TO QUEUE
 # ─────────────────────────────────────────
 
-async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def process_new_items(update: Update, context: ContextTypes.DEFAULT_TYPE, new_items: list):
 
-    if not is_admin(update):
-        await deny(update)
-        return
-
-    document = update.message.document
-    if not document:
-        return
-
-    # DOWNLOAD FILE
-    file = await context.bot.get_file(document.file_id)
-    file_name = document.file_name
-    await file.download_to_drive(file_name)
-
-    new_items = load_json(file_name)
-    queue     = load_json("queue.json")
-    archive   = load_json("archive.json")
-
-    added = []
+    queue   = load_json("queue.json")
+    archive = load_json("archive.json")
+    added   = []
 
     for item in new_items:
 
@@ -150,7 +135,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # PREVIEW FIRST ITEM BEFORE ADDING
     if added:
         preview_text = (
-            f"👁 *Preview of first item:*\n\n"
+            f"👁 *Preview of first item ({added[0]['type'].upper()}):*\n\n"
             + format_post(added[0])
         )
         await update.message.reply_text(preview_text, parse_mode="Markdown")
@@ -177,8 +162,112 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ─────────────────────────────────────────
+# FILE UPLOAD HANDLER (.json file)
+# ─────────────────────────────────────────
+
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    document = update.message.document
+    if not document:
+        return
+
+    # DOWNLOAD AND READ FILE
+    file = await context.bot.get_file(document.file_id)
+    file_name = document.file_name
+    await file.download_to_drive(file_name)
+
+    try:
+        new_items = load_json(file_name)
+    except Exception:
+        await update.message.reply_text("❌ Could not read file. Make sure it is valid JSON.")
+        return
+
+    if not isinstance(new_items, list):
+        await update.message.reply_text("❌ JSON must be a list `[...]` of items.")
+        return
+
+    await process_new_items(update, context, new_items)
+
+
+# ─────────────────────────────────────────
+# TEXT MESSAGE HANDLER (pasted JSON text)
+# ─────────────────────────────────────────
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        return  # silently ignore non-admin text
+
+    text = update.message.text.strip()
+
+    # ONLY HANDLE IF IT LOOKS LIKE JSON
+    if not (text.startswith("[") or text.startswith("{")):
+        return
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        await update.message.reply_text("❌ Invalid JSON. Please check the format and try again.")
+        return
+
+    # WRAP SINGLE OBJECT IN A LIST
+    if isinstance(data, dict):
+        data = [data]
+
+    if not isinstance(data, list):
+        await update.message.reply_text("❌ JSON must be a list `[...]` of items.")
+        return
+
+    await process_new_items(update, context, data)
+
+
+# ─────────────────────────────────────────
 # COMMANDS
 # ─────────────────────────────────────────
+
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    text = (
+        "👋 *Welcome to AffairsMCQ Bot!*\n\n"
+        "I auto-post news and MCQs to your Telegram channel every 20 minutes.\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n"
+        "📥 *HOW TO ADD CONTENT*\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "Send a `.json` file *or* paste JSON text directly here.\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n"
+        "🎮 *COMMANDS*\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "📊 /status — Queue size, uptime, last post\n"
+        "⏸ /pause — Stop auto-posting\n"
+        "▶️ /resume — Resume auto-posting\n"
+        "⚡ /next — Force post next item now\n"
+        "⏭ /skip — Skip next item in queue\n"
+        "📋 /queue — List all pending posts\n"
+        "🗑 /clear — Clear entire queue (asks confirm)\n"
+        "🕒 /setinterval 30 — Change posting interval\n"
+        "📈 /revision — Top revised posts stats\n"
+        "📊 /poll — Post next MCQ as a quiz poll\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n"
+        "⏰ *POSTING HOURS*\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "Posts go out between *4:00 AM – 10:00 PM* only.\n"
+        "Outside these hours the bot waits automatically.\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n"
+        "♻️ *REVISION MODE*\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "When queue is empty, old posts are reposted automatically."
+    )
+
+    await update.message.reply_text(text, parse_mode="Markdown")
+
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -556,10 +645,14 @@ async def cmd_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# FILE HANDLER
+# FILE HANDLER (json file attachment)
 app.add_handler(MessageHandler(filters.ATTACHMENT, handle_document))
 
+# TEXT HANDLER (pasted json text)
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
 # COMMANDS
+app.add_handler(CommandHandler("start",        cmd_start))
 app.add_handler(CommandHandler("status",       cmd_status))
 app.add_handler(CommandHandler("pause",        cmd_pause))
 app.add_handler(CommandHandler("resume",       cmd_resume))
