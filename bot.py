@@ -13,7 +13,7 @@ from telegram.ext import (
 )
 
 BOT_TOKEN  = os.environ["BOT_TOKEN"]
-CHANNEL_ID = os.environ["CHANNEL_ID"]
+CHANNEL_ID = os.environ["CHANNEL_ID"]   # used only for first-time init
 ADMIN_ID   = int(os.environ["ADMIN_ID"])
 
 # POSTING SCHEDULE (24h format, local server time)
@@ -42,6 +42,22 @@ def load_json(filename):
 def save_json(filename, data):
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+# ─────────────────────────────────────────
+# CHANNEL HELPERS
+# ─────────────────────────────────────────
+
+def load_channels():
+    return load_json("channels.json")
+
+
+def save_channels(channels):
+    save_json("channels.json", channels)
+
+
+def get_active_channels():
+    return [ch["id"] for ch in load_channels() if ch.get("active", True)]
 
 
 # ─────────────────────────────────────────
@@ -488,6 +504,110 @@ async def cmd_revision(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ─────────────────────────────────────────
+# CHANNEL MANAGEMENT COMMANDS
+# ─────────────────────────────────────────
+
+async def cmd_channels(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    channels = load_channels()
+
+    if not channels:
+        await update.message.reply_text("📭 No channels configured.")
+        return
+
+    lines = ["📡 *Channels:*\n"]
+    for ch in channels:
+        status = "✅ Active" if ch.get("active", True) else "⏸ Paused"
+        lines.append(f"{status} — `{ch['id']}`")
+
+    lines.append("\nUse /addchannel @username to add")
+    lines.append("Use /togglechannel @username to pause/resume")
+    lines.append("Use /removechannel @username to remove")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def cmd_addchannel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /addchannel @channelname")
+        return
+
+    channel_id = context.args[0]
+    if not channel_id.startswith("@") and not channel_id.startswith("-"):
+        await update.message.reply_text("❌ Channel must start with @ or be a numeric ID.")
+        return
+
+    channels = load_channels()
+
+    if any(ch["id"] == channel_id for ch in channels):
+        await update.message.reply_text(f"⚠️ `{channel_id}` is already in the list.", parse_mode="Markdown")
+        return
+
+    channels.append({"id": channel_id, "active": True})
+    save_channels(channels)
+    await update.message.reply_text(f"✅ Added `{channel_id}` — posting is *active*.", parse_mode="Markdown")
+
+
+async def cmd_togglechannel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /togglechannel @channelname")
+        return
+
+    channel_id = context.args[0]
+    channels = load_channels()
+
+    for ch in channels:
+        if ch["id"] == channel_id:
+            ch["active"] = not ch.get("active", True)
+            save_channels(channels)
+            status = "✅ Active" if ch["active"] else "⏸ Paused"
+            await update.message.reply_text(
+                f"{status} — `{channel_id}` posting is now *{'on' if ch['active'] else 'off'}*.",
+                parse_mode="Markdown"
+            )
+            return
+
+    await update.message.reply_text(f"❌ Channel `{channel_id}` not found. Use /channels to see the list.", parse_mode="Markdown")
+
+
+async def cmd_removechannel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /removechannel @channelname")
+        return
+
+    channel_id = context.args[0]
+    channels = load_channels()
+
+    new_channels = [ch for ch in channels if ch["id"] != channel_id]
+
+    if len(new_channels) == len(channels):
+        await update.message.reply_text(f"❌ Channel `{channel_id}` not found.", parse_mode="Markdown")
+        return
+
+    save_channels(new_channels)
+    await update.message.reply_text(f"🗑 Removed `{channel_id}` from the list.", parse_mode="Markdown")
+
+
+# ─────────────────────────────────────────
 # DAILY REPORT
 # ─────────────────────────────────────────
 
@@ -599,30 +719,37 @@ async def auto_post(app):
 # ─────────────────────────────────────────
 
 async def send_item(bot, item, label=None):
-    if item.get("type") == "mcq":
-        # MCQ → always send as Telegram quiz poll
-        options = item["options"]
-        correct_index = next(
-            (i for i, o in enumerate(options) if o.startswith(item["answer"][0])),
-            0
-        )
-        clean_options = [o[3:].strip() if len(o) > 3 else o for o in options]
-        await bot.send_poll(
-            chat_id=CHANNEL_ID,
-            question=item["question"][:300],
-            options=clean_options,
-            type="quiz",
-            correct_option_id=correct_index,
-            explanation=item.get("explanation", "")[:200],
-            is_anonymous=True
-        )
-    else:
-        # NEWS → send as text message
-        await bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=format_post(item, label=label),
-            parse_mode="Markdown"
-        )
+    active_channels = get_active_channels()
+
+    if not active_channels:
+        print("⚠️ No active channels to post to.")
+        return
+
+    for channel in active_channels:
+        if item.get("type") == "mcq":
+            # MCQ → always send as Telegram quiz poll
+            options = item["options"]
+            correct_index = next(
+                (i for i, o in enumerate(options) if o.startswith(item["answer"][0])),
+                0
+            )
+            clean_options = [o[3:].strip() if len(o) > 3 else o for o in options]
+            await bot.send_poll(
+                chat_id=channel,
+                question=item["question"][:300],
+                options=clean_options,
+                type="quiz",
+                correct_option_id=correct_index,
+                explanation=item.get("explanation", "")[:200],
+                is_anonymous=True
+            )
+        else:
+            # NEWS → send as text message
+            await bot.send_message(
+                chat_id=channel,
+                text=format_post(item, label=label),
+                parse_mode="Markdown"
+            )
 
 
 async def cmd_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -683,8 +810,12 @@ app.add_handler(CommandHandler("clear",        cmd_clear))
 app.add_handler(CommandHandler("confirmclear", cmd_confirmclear))
 app.add_handler(CommandHandler("cancel",       cmd_cancel))
 app.add_handler(CommandHandler("setinterval",  cmd_setinterval))
-app.add_handler(CommandHandler("revision",     cmd_revision))
-app.add_handler(CommandHandler("poll",         cmd_poll))
+app.add_handler(CommandHandler("revision",      cmd_revision))
+app.add_handler(CommandHandler("poll",          cmd_poll))
+app.add_handler(CommandHandler("channels",      cmd_channels))
+app.add_handler(CommandHandler("addchannel",    cmd_addchannel))
+app.add_handler(CommandHandler("togglechannel", cmd_togglechannel))
+app.add_handler(CommandHandler("removechannel", cmd_removechannel))
 
 # DAILY REPORT — every day at 11 PM
 app.job_queue.run_daily(
