@@ -48,13 +48,43 @@ def save_json(filename, data):
 # FORMAT HELPERS
 # ─────────────────────────────────────────
 
-def format_news(item):
-    return item["content"]
+def format_news(item, label="📰 TODAY NEWS"):
+    # NEW STRUCTURED FORMAT (has "title" field)
+    if "title" in item:
+        facts = item.get("facts", [])
+        facts_text = "\n".join(f"▪️ {f}" for f in facts) if facts else ""
+
+        parts = [f"*{label}*\n"]
+        parts.append(f"🏛️ *{item['title']}*\n")
+
+        if item.get("who"):
+            parts.append(f"👤 *Who →* {item['who']}")
+        if item.get("what"):
+            parts.append(f"📋 *What →* {item['what']}")
+        if item.get("where"):
+            parts.append(f"📍 *Where →* {item['where']}")
+        if item.get("purpose"):
+            parts.append(f"🎯 *Purpose →* {item['purpose']}")
+
+        if facts_text:
+            parts.append(f"\n📌 *Important Facts*\n{facts_text}")
+
+        if item.get("exam_angle"):
+            parts.append(f"\n⚠️ *Exam Angle →* {item['exam_angle']}")
+
+        if item.get("hashtags"):
+            parts.append(f"\n{item['hashtags']}")
+
+        return "\n".join(parts)
+
+    # OLD RAW FORMAT (has "content" field) — kept for backward compatibility
+    return f"*{label}*\n\n" + item["content"]
 
 
-def format_mcq(item):
+def format_mcq(item, label="📰 TODAY MCQ"):
     options_text = "\n".join(item["options"])
     return (
+        f"*{label}*\n\n"
         f"❓ *QUESTION*\n\n"
         f"{item['question']}\n\n"
         f"{options_text}\n\n"
@@ -69,10 +99,16 @@ def detect_type(item):
     return "news"
 
 
-def format_post(item):
-    if item.get("type") == "mcq":
-        return format_mcq(item)
-    return format_news(item)
+def format_post(item, label=None):
+    is_mcq = item.get("type") == "mcq"
+
+    # DEFAULT LABELS
+    if label is None:
+        label = "📰 TODAY MCQ" if is_mcq else "📰 TODAY NEWS"
+
+    if is_mcq:
+        return format_mcq(item, label)
+    return format_news(item, label)
 
 
 # ─────────────────────────────────────────
@@ -264,6 +300,26 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "♻️ *REVISION MODE*\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "When queue is empty, old posts are reposted automatically."
+    )
+
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    text = (
+        "🆘 *COMMANDS*\n\n"
+        "📊 /status — Queue, archive, uptime, interval\n"
+        "⏸ /pause — Stop auto-posting\n"
+        "▶️ /resume — Resume auto-posting\n"
+        "⚡ /next — Force post next item now\n"
+        "⏭ /skip — Skip next item in queue\n"
+        "📋 /queue — List all pending posts\n"
+        "🗑 /clear — Clear entire queue\n"
+        "🕒 /setinterval 30 — Change posting interval\n"
+        "📈 /revision — Top revised posts stats\n"
+        "📊 /poll — Post next MCQ as quiz poll\n"
+        "🆘 /help — Show this list"
     )
 
     await update.message.reply_text(text, parse_mode="Markdown")
@@ -549,11 +605,11 @@ async def auto_post(app):
                     archive.append(old_post)
                     save_json("archive.json", archive)
 
-                    revision_text = f"♻️ *REVISION*\n\n" + format_post(old_post)
+                    revision_label = "♻️ REVISION MCQ" if old_post.get("type") == "mcq" else "♻️ REVISION NEWS"
 
                     await app.bot.send_message(
                         chat_id=CHANNEL_ID,
-                        text=revision_text,
+                        text=format_post(old_post, label=revision_label),
                         parse_mode="Markdown"
                     )
                     print(f"♻️ Posted revision: {old_post['id']}")
@@ -653,6 +709,7 @@ app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
 # COMMANDS
 app.add_handler(CommandHandler("start",        cmd_start))
+app.add_handler(CommandHandler("help",         cmd_help))
 app.add_handler(CommandHandler("status",       cmd_status))
 app.add_handler(CommandHandler("pause",        cmd_pause))
 app.add_handler(CommandHandler("resume",       cmd_resume))
