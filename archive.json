@@ -1,25 +1,5 @@
 [
   {
-    "content": "🌱 *ENVIRONMENT | India Adds New Ramsar Site*\n\n🔹 A new wetland from India added to Ramsar list\n🔹 Ramsar Convention focuses on wetland conservation\n\n📌 *Static GK:* Ramsar Convention signed in Iran\n\n#Environment #Ramsar",
-    "id": "NEWS_4",
-    "revision_count": 0
-  },
-  {
-    "content": "👤 *APPOINTMENTS | New SEBI Chairperson Appointed*\n\n🔹 Government appointed a new Chairperson of SEBI\n🔹 SEBI regulates securities market in India\n\n📌 *Exam Note:* SEBI Headquarters → Mumbai\n\n#SEBI #Appointments",
-    "id": "NEWS_5",
-    "revision_count": 0
-  },
-  {
-    "content": "🏦 *BANKING | RBI Launches Financial Awareness Campaign*\n\n🔹 RBI started a nationwide financial literacy campaign\n🔹 Focus areas → digital banking & fraud prevention\n\n📌 *Exam Note:* RBI Headquarters → Mumbai\n\n#RBI #BankingAwareness",
-    "id": "NEWS_6",
-    "revision_count": 0
-  },
-  {
-    "content": "📈 *ECONOMY | India’s GDP Growth Projected at 7%*\n\n🔹 IMF projected India’s GDP growth at 7% for FY 2026\n🔹 India remains fastest-growing major economy\n\n📌 *Static GK:* IMF HQ → Washington D.C.\n\n#GDP #Economy",
-    "id": "NEWS_7",
-    "revision_count": 0
-  },
-  {
     "content": "🌍 *INTERNATIONAL | BRICS Summit to be Held in Brazil*\n\n🔹 Brazil will host the next BRICS Summit\n🔹 Focus on trade cooperation & development\n\n📌 *Exam Fact:* New Development Bank HQ → Shanghai\n\n#BRICS #InternationalAffairs",
     "id": "NEWS_8",
     "revision_count": 0
@@ -47,6 +27,26 @@
   {
     "content": "🌍 *INTERNATIONAL | BRICS Summit to be Held in Brazil*\n\n🔹 Brazil will host the next BRICS Summit\n🔹 Focus on trade cooperation & development\n\n📌 *Exam Fact:* New Development Bank HQ → Shanghai\n\n#BRICS #InternationalAffairs",
     "id": "NEWS_3",
+    "revision_count": 1
+  },
+  {
+    "content": "🌱 *ENVIRONMENT | India Adds New Ramsar Site*\n\n🔹 A new wetland from India added to Ramsar list\n🔹 Ramsar Convention focuses on wetland conservation\n\n📌 *Static GK:* Ramsar Convention signed in Iran\n\n#Environment #Ramsar",
+    "id": "NEWS_4",
+    "revision_count": 1
+  },
+  {
+    "content": "👤 *APPOINTMENTS | New SEBI Chairperson Appointed*\n\n🔹 Government appointed a new Chairperson of SEBI\n🔹 SEBI regulates securities market in India\n\n📌 *Exam Note:* SEBI Headquarters → Mumbai\n\n#SEBI #Appointments",
+    "id": "NEWS_5",
+    "revision_count": 1
+  },
+  {
+    "content": "🏦 *BANKING | RBI Launches Financial Awareness Campaign*\n\n🔹 RBI started a nationwide financial literacy campaign\n🔹 Focus areas → digital banking & fraud prevention\n\n📌 *Exam Note:* RBI Headquarters → Mumbai\n\n#RBI #BankingAwareness",
+    "id": "NEWS_6",
+    "revision_count": 1
+  },
+  {
+    "content": "📈 *ECONOMY | India’s GDP Growth Projected at 7%*\n\n🔹 IMF projected India’s GDP growth at 7% for FY 2026\n🔹 India remains fastest-growing major economy\n\n📌 *Static GK:* IMF HQ → Washington D.C.\n\n#GDP #Economy",
+    "id": "NEWS_7",
     "revision_count": 1
   }
 ]
