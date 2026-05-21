@@ -1,30 +1,30 @@
 [
   {
-    "question": "Which Small Finance Bank inaugurated India's first AI-powered 'phygital' banking branch in Guwahati?",
+    "question": "Which opposition MP was recently nominated by President Edgars Rinkevics as the next Prime Minister of Latvia?",
     "options": [
-      "AU Small Finance Bank",
-      "Equitas Small Finance Bank",
-      "Slice Small Finance Bank",
-      "Capital Small Finance Bank"
+      "A) Krisjanis Karins",
+      "B) Evika Silina",
+      "C) Andris Kulbergs",
+      "D) Edvards Smiltens"
     ],
-    "correct_option_index": 2,
-    "explanation": "Assam CM inaugurated India's 1st AI phygital branch of Slice SFB in Guwahati, featuring self-service kiosks and paperless cash transactions. #17May2026",
+    "answer": "C) Andris Kulbergs",
+    "explanation": "Latvian President Edgars Rinkevics nominated opposition MP Andris Kulbergs from the United List party as the next Prime Minister following constitutional authority. #17May2026",
     "type": "mcq",
-    "id": "POST_17",
+    "id": "POST_19",
     "revision_count": 0
   },
   {
-    "question": "Who was appointed as the Chairperson of the Committee on Empowerment of Women by Lok Sabha Speaker Om Birla?",
+    "question": "The Supreme Court (Number of Judges) Amendment Ordinance, 2026, has increased the sanctioned strength of Supreme Court judges to how many (excluding the CJI)?",
     "options": [
-      "Smt. Droupadi Murmu",
-      "Dr. Daggubati Purandeswari",
-      "Smt. Nirmala Sitharaman",
-      "Smt. Smriti Irani"
+      "A) 31",
+      "B) 34",
+      "C) 37",
+      "D) 39"
     ],
-    "correct_option_index": 1,
-    "explanation": "Om Birla formed a 28-member panel on Women Empowerment chaired by MP Dr. Daggubati Purandeswari to strengthen welfare mechanisms. #17May2026",
+    "answer": "C) 37",
+    "explanation": "President Murmu approved an increase in Supreme Court judges from 33 to 37 (excluding the CJI) via an ordinance under Article 123 to address case backlogs. #17May2026",
     "type": "mcq",
-    "id": "POST_18",
+    "id": "POST_20",
     "revision_count": 0
   }
 ]
