@@ -11,207 +11,196 @@ from telegram.ext import (
 )
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-
 CHANNEL_ID = "@affairsmcq"
 
 
-# RECEIVE JSON FILE
+# ─────────────────────────────────────────
+# FORMAT HELPERS
+# ─────────────────────────────────────────
+
+def format_news(item):
+    return item["content"]
+
+
+def format_mcq(item):
+    options_text = "\n".join(item["options"])
+    text = (
+        f"❓ *QUESTION*\n\n"
+        f"{item['question']}\n\n"
+        f"{options_text}\n\n"
+        f"✅ *Answer:* {item['answer']}\n\n"
+        f"📝 {item['explanation']}"
+    )
+    return text
+
+
+def detect_type(item):
+    if "question" in item:
+        return "mcq"
+    return "news"
+
+
+def format_post(item):
+    if item.get("type") == "mcq":
+        return format_mcq(item)
+    return format_news(item)
+
+
+def get_parse_mode(item):
+    # MCQ and news both use standard Markdown
+    return "Markdown"
+
+
+# ─────────────────────────────────────────
+# FILE HELPERS
+# ─────────────────────────────────────────
+
+def load_json(filename):
+    with open(filename, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_json(filename, data):
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+# ─────────────────────────────────────────
+# FILE UPLOAD HANDLER
+# ─────────────────────────────────────────
+
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     document = update.message.document
+    if not document:
+        return
 
-    if document:
+    # DOWNLOAD FILE
+    file = await context.bot.get_file(document.file_id)
+    file_name = document.file_name
+    await file.download_to_drive(file_name)
 
-        file = await context.bot.get_file(document.file_id)
+    new_items = load_json(file_name)
+    queue = load_json("queue.json")
+    archive = load_json("archive.json")
 
-        file_name = document.file_name
+    added = []
 
-        await file.download_to_drive(file_name)
+    for item in new_items:
 
-        # LOAD NEW NEWS
-        with open(file_name, "r", encoding="utf-8") as f:
-            new_news = json.load(f)
-
-        # LOAD EXISTING QUEUE
-        with open("queue.json", "r", encoding="utf-8") as f:
-            queue = json.load(f)
-
-        # LOAD ARCHIVE
-        with open("archive.json", "r", encoding="utf-8") as f:
-            archive = json.load(f)
-
-        filtered_news = []
-
-        # CHECK DUPLICATES
-        for index, news in enumerate(new_news):
-
-            duplicate = False
-
-            # CHECK AGAINST ARCHIVE
-            for old_news in archive:
-
-                # STRICT DUPLICATE CHECK
-                if news["content"] == old_news["content"]:
-
-                    duplicate = True
-
-                    print("⚠️ Duplicate skipped")
-
-                    break
-
-            # IF NOT DUPLICATE
-            if not duplicate:
-
-                news["id"] = (
-                    f"NEWS_{len(archive) + len(filtered_news) + 1}"
-                )
-
-                news["revision_count"] = 0
-
-                filtered_news.append(news)
-
-        # CHECK IF QUEUE WAS EMPTY BEFORE ADDING
-        queue_was_empty = len(queue) == 0
-
-        # ADD TO QUEUE
-        queue.extend(filtered_news)
-
-        # ADD TO ARCHIVE
-        archive.extend(filtered_news)
-
-        # SAVE UPDATED QUEUE
-        with open("queue.json", "w", encoding="utf-8") as f:
-            json.dump(queue, f, ensure_ascii=False, indent=2)
-
-        # SAVE UPDATED ARCHIVE
-        with open("archive.json", "w", encoding="utf-8") as f:
-            json.dump(archive, f, ensure_ascii=False, indent=2)
-
-        # INSTANT FIRST POST
-        if queue_was_empty and filtered_news:
-
-            first_post = queue.pop(0)
-
-            await context.bot.send_message(
-                chat_id=CHANNEL_ID,
-                text=first_post["content"],
-                parse_mode="Markdown"
-            )
-
-            print(f"✅ Instantly posted: {first_post['id']}")
-
-            # SAVE UPDATED QUEUE AGAIN
-            with open("queue.json", "w", encoding="utf-8") as f:
-                json.dump(queue, f, ensure_ascii=False, indent=2)
-
-        await update.message.reply_text(
-            f"✅ {len(filtered_news)} new posts added to queue!"
+        # SKIP DUPLICATES
+        is_duplicate = any(
+            existing.get("content") == item.get("content") and
+            existing.get("question") == item.get("question")
+            for existing in archive
         )
 
+        if is_duplicate:
+            print("⚠️ Duplicate skipped")
+            continue
 
-# AUTO POST SYSTEM
+        # SET METADATA
+        item["type"] = detect_type(item)
+        item["id"] = f"POST_{len(archive) + len(added) + 1}"
+        item["revision_count"] = 0
+
+        added.append(item)
+
+    queue_was_empty = len(queue) == 0
+
+    queue.extend(added)
+    archive.extend(added)
+
+    save_json("queue.json", queue)
+    save_json("archive.json", archive)
+
+    # INSTANT FIRST POST IF QUEUE WAS EMPTY
+    if queue_was_empty and added:
+        first = queue.pop(0)
+        await context.bot.send_message(
+            chat_id=CHANNEL_ID,
+            text=format_post(first),
+            parse_mode="Markdown"
+        )
+        print(f"✅ Instantly posted: {first['id']}")
+        save_json("queue.json", queue)
+
+    await update.message.reply_text(
+        f"✅ {len(added)} new posts added to queue!"
+    )
+
+
+# ─────────────────────────────────────────
+# AUTO POST LOOP
+# ─────────────────────────────────────────
+
 async def auto_post(app):
 
     while True:
 
         try:
 
-            # LOAD QUEUE
-            with open("queue.json", "r", encoding="utf-8") as f:
-                queue = json.load(f)
-
+            queue = load_json("queue.json")
             print(f"📰 Queue size: {len(queue)}")
 
-            # IF QUEUE HAS POSTS
             if queue:
 
-                # TAKE FIRST POST
+                # POST NEXT ITEM FROM QUEUE
                 post = queue.pop(0)
-
-                # SEND TO CHANNEL
                 await app.bot.send_message(
                     chat_id=CHANNEL_ID,
-                    text=post["content"],
+                    text=format_post(post),
                     parse_mode="Markdown"
                 )
-
                 print(f"✅ Posted: {post['id']}")
-
-                # SAVE UPDATED QUEUE
-                with open("queue.json", "w", encoding="utf-8") as f:
-                    json.dump(queue, f, ensure_ascii=False, indent=2)
-
-                # WAIT 20 MINUTES
-                await asyncio.sleep(1200)
+                save_json("queue.json", queue)
 
             else:
 
+                # REVISION MODE — REPOST FROM ARCHIVE
                 print("♻️ Queue empty, starting revision mode")
-
-                # LOAD ARCHIVE
-                with open("archive.json", "r", encoding="utf-8") as f:
-                    archive = json.load(f)
-
+                archive = load_json("archive.json")
                 print(f"📦 Archive size: {len(archive)}")
 
-                # IF ARCHIVE HAS NEWS
                 if archive:
 
-                    # ROTATE ARCHIVE
                     old_post = archive.pop(0)
-
-                    # INCREASE REVISION COUNT
                     old_post["revision_count"] += 1
-
-                    # PUT BACK AT END
                     archive.append(old_post)
+                    save_json("archive.json", archive)
 
-                    # SAVE UPDATED ARCHIVE
-                    with open("archive.json", "w", encoding="utf-8") as f:
-                        json.dump(archive, f, ensure_ascii=False, indent=2)
-
-                    revision_text = (
-                        f"♻️ *REVISION NEWS*\n\n"
-                        + old_post["content"]
-                    )
+                    revision_text = f"♻️ *REVISION*\n\n" + format_post(old_post)
 
                     await app.bot.send_message(
                         chat_id=CHANNEL_ID,
                         text=revision_text,
                         parse_mode="Markdown"
                     )
-
                     print(f"♻️ Posted revision: {old_post['id']}")
 
                 else:
+                    print("⚠️ Archive is empty")
 
-                    print("⚠️ Archive empty")
-
-                # WAIT 20 MINUTES
-                await asyncio.sleep(1200)
+            # WAIT 20 MINUTES
+            await asyncio.sleep(1200)
 
         except Exception as e:
-
             print(f"❌ AUTO POST ERROR: {e}")
-
-            # WAIT 30 SECONDS BEFORE RETRY
             await asyncio.sleep(30)
 
 
+# ─────────────────────────────────────────
+# START BOT
+# ─────────────────────────────────────────
+
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# RECEIVE FILES
-app.add_handler(
-    MessageHandler(filters.ATTACHMENT, handle_document)
-)
+app.add_handler(MessageHandler(filters.ATTACHMENT, handle_document))
 
-print("🚀 Bot is running...")
-
-
-# START AUTO POSTER
 app.job_queue.run_once(
     lambda context: asyncio.create_task(auto_post(app)),
     when=1
 )
 
+print("🚀 Bot is running...")
 app.run_polling()
