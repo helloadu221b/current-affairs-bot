@@ -260,7 +260,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Send a `.json` file *or* paste JSON text directly here.\n\n"
 
         "━━━━━━━━━━━━━━━━━━\n"
-        "🎮 *COMMANDS*\n"
+        "🎮 *POSTING CONTROLS*\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "📊 /status — Queue size, uptime, last post\n"
         "⏸ /pause — Stop auto-posting\n"
@@ -271,7 +271,15 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🗑 /clear — Clear entire queue (asks confirm)\n"
         "🕒 /setinterval 30 — Change posting interval\n"
         "📈 /revision — Top revised posts stats\n"
-        "📊 /poll — Post next MCQ as a quiz poll\n\n"
+        "📊 /poll — Post next MCQ as quiz poll\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n"
+        "📡 *CHANNEL MANAGEMENT*\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "📋 /channels — List all channels & status\n"
+        "➕ /addchannel @name — Add a new channel\n"
+        "🔁 /togglechannel @name — Pause/resume a channel\n"
+        "🗑 /removechannel @name — Remove a channel\n\n"
 
         "━━━━━━━━━━━━━━━━━━\n"
         "⏰ *POSTING HOURS*\n"
@@ -299,9 +307,13 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "⏭ /skip — Skip next item in queue\n"
         "📋 /queue — List all pending posts\n"
         "🗑 /clear — Clear entire queue\n"
-        "🕒 /setinterval 30 — Change posting interval\n"
-        "📈 /revision — Top revised posts stats\n"
-        "📊 /poll — Post next MCQ as quiz poll\n"
+        "🕒 /setinterval 30 — Change interval\n"
+        "📈 /revision — Top revised posts\n"
+        "📊 /poll — Post next MCQ as quiz poll\n\n"
+        "📡 /channels — List channels & status\n"
+        "➕ /addchannel @name — Add channel\n"
+        "🔁 /togglechannel @name — Pause/resume channel\n"
+        "🗑 /removechannel @name — Remove channel\n\n"
         "🆘 /help — Show this list"
     )
 
