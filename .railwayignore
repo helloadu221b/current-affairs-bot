@@ -1,4 +1,10 @@
 venv/
+.local/
+.cache/
+.pythonlibs/
+attached_assets/
 __pycache__/
 *.pyc
+*.save
 .env
+.replit
