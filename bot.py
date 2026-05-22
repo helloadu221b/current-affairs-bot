@@ -103,6 +103,8 @@ def format_post(item, label=None):
 # ─────────────────────────────────────────
 
 def is_admin(update: Update) -> bool:
+    if update.effective_user is None:
+        return False
     return update.effective_user.id == ADMIN_ID
 
 
