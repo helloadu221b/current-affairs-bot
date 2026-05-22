@@ -118,19 +118,26 @@ async def deny(update: Update):
 # ─────────────────────────────────────────
 
 def pick_alternating(items):
-    """Return the index of the next item to post, alternating MCQ → news → MCQ → ..."""
+    """Return the index of the next item to post, alternating MCQ → news → MCQ → ...
+    Falls back to whatever type is available if the desired type is not in the list."""
     if not items:
         return None
+
     if last_type_posted == "mcq":
         desired = "news"
     elif last_type_posted == "news":
         desired = "mcq"
     else:
         return 0  # no preference yet, take whatever is first
+
     for i, item in enumerate(items):
         if item.get("type") == desired:
             return i
-    return 0  # no item of desired type found, fall back to first
+
+    # Desired type not found — only one type available, post it and log
+    available_types = set(item.get("type") for item in items)
+    print(f"⚠️ No '{desired}' found in list. Only {available_types} available. Posting next available item.")
+    return 0
 
 
 # ─────────────────────────────────────────
@@ -408,7 +415,10 @@ async def cmd_next(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Queue is empty, nothing to post.")
         return
 
-    idx  = pick_alternating(queue)
+    idx = pick_alternating(queue)
+    if idx is None:
+        await update.message.reply_text("❌ Queue is empty, nothing to post.")
+        return
     post = queue.pop(idx)
     await send_item(context.bot, post)
     save_json("queue.json", queue)
@@ -703,6 +713,9 @@ async def auto_post(app):
 
                 # POST NEXT ITEM FROM QUEUE (alternating MCQ/news)
                 idx  = pick_alternating(queue)
+                if idx is None:
+                    await asyncio.sleep(POST_INTERVAL)
+                    continue
                 post = queue.pop(idx)
                 await send_item(app.bot, post)
                 print(f"✅ Posted: {post['id']} ({post['type']})")
@@ -720,7 +733,10 @@ async def auto_post(app):
 
                 if archive:
 
-                    idx      = pick_alternating(archive)
+                    idx = pick_alternating(archive)
+                    if idx is None:
+                        await asyncio.sleep(POST_INTERVAL)
+                        continue
                     old_post = archive.pop(idx)
                     old_post["revision_count"] += 1
                     archive.append(old_post)
