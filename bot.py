@@ -786,7 +786,7 @@ async def cmd_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # REMOVE FROM QUEUE AND POST AS POLL
     item = queue.pop(mcq_index)
-    await post_as_poll(context.bot, item)
+    await send_item(context.bot, item)
     save_json("queue.json", queue)
 
     global posts_sent, last_posted
