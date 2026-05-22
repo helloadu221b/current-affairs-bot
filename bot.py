@@ -24,10 +24,11 @@ POST_HOUR_END   = 22  # 10 PM
 POST_INTERVAL = 1200  # 20 minutes
 
 # RUNTIME STATE
-paused      = False
-start_time  = datetime.now(timezone.utc)
-posts_sent  = 0
-last_posted = None
+paused           = False
+start_time       = datetime.now(timezone.utc)
+posts_sent       = 0
+last_posted      = None
+last_type_posted = None  # tracks "mcq" or "news" to enforce alternating order
 
 
 # ─────────────────────────────────────────
@@ -113,6 +114,26 @@ async def deny(update: Update):
 
 
 # ─────────────────────────────────────────
+# ALTERNATING ORDER HELPER
+# ─────────────────────────────────────────
+
+def pick_alternating(items):
+    """Return the index of the next item to post, alternating MCQ → news → MCQ → ..."""
+    if not items:
+        return None
+    if last_type_posted == "mcq":
+        desired = "news"
+    elif last_type_posted == "news":
+        desired = "mcq"
+    else:
+        return 0  # no preference yet, take whatever is first
+    for i, item in enumerate(items):
+        if item.get("type") == desired:
+            return i
+    return 0  # no item of desired type found, fall back to first
+
+
+# ─────────────────────────────────────────
 # SCHEDULE CHECK
 # ─────────────────────────────────────────
 
@@ -167,12 +188,14 @@ async def process_new_items(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
     # INSTANT FIRST POST IF QUEUE WAS EMPTY AND IN HOURS
     if queue_was_empty and added and within_posting_hours() and not paused:
-        first = queue.pop(0)
+        idx = pick_alternating(queue)
+        first = queue.pop(idx)
         await send_item(context.bot, first)
         save_json("queue.json", queue)
-        global posts_sent, last_posted
-        posts_sent  += 1
-        last_posted  = first["id"]
+        global posts_sent, last_posted, last_type_posted
+        posts_sent       += 1
+        last_posted       = first["id"]
+        last_type_posted  = first["type"]
         print(f"✅ Instantly posted: {first['id']}")
 
     await update.message.reply_text(
@@ -385,15 +408,17 @@ async def cmd_next(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Queue is empty, nothing to post.")
         return
 
-    post = queue.pop(0)
+    idx  = pick_alternating(queue)
+    post = queue.pop(idx)
     await send_item(context.bot, post)
     save_json("queue.json", queue)
 
-    global posts_sent, last_posted
-    posts_sent  += 1
-    last_posted  = post["id"]
+    global posts_sent, last_posted, last_type_posted
+    posts_sent       += 1
+    last_posted       = post["id"]
+    last_type_posted  = post["type"]
 
-    await update.message.reply_text(f"✅ Force posted: *{post['id']}*", parse_mode="Markdown")
+    await update.message.reply_text(f"✅ Force posted: *{post['id']}* ({post['type'].upper()})", parse_mode="Markdown")
 
 
 async def cmd_skip(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -653,7 +678,7 @@ async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
 
 async def auto_post(app):
 
-    global posts_sent, last_posted, POST_INTERVAL
+    global posts_sent, last_posted, last_type_posted, POST_INTERVAL
 
     while True:
 
@@ -676,24 +701,27 @@ async def auto_post(app):
 
             if queue:
 
-                # POST NEXT ITEM FROM QUEUE
-                post = queue.pop(0)
+                # POST NEXT ITEM FROM QUEUE (alternating MCQ/news)
+                idx  = pick_alternating(queue)
+                post = queue.pop(idx)
                 await send_item(app.bot, post)
-                print(f"✅ Posted: {post['id']}")
+                print(f"✅ Posted: {post['id']} ({post['type']})")
                 save_json("queue.json", queue)
-                posts_sent  += 1
-                last_posted  = post["id"]
+                posts_sent       += 1
+                last_posted       = post["id"]
+                last_type_posted  = post["type"]
 
             else:
 
-                # REVISION MODE
+                # REVISION MODE (alternating MCQ/news from archive)
                 print("♻️ Queue empty, starting revision mode")
                 archive = load_json("archive.json")
                 print(f"📦 Archive size: {len(archive)}")
 
                 if archive:
 
-                    old_post = archive.pop(0)
+                    idx      = pick_alternating(archive)
+                    old_post = archive.pop(idx)
                     old_post["revision_count"] += 1
                     archive.append(old_post)
                     save_json("archive.json", archive)
@@ -701,9 +729,10 @@ async def auto_post(app):
                     revision_label = "♻️ REVISION MCQ" if old_post.get("type") == "mcq" else "♻️ REVISION NEWS"
 
                     await send_item(app.bot, old_post, label=revision_label)
-                    print(f"♻️ Posted revision: {old_post['id']}")
-                    posts_sent  += 1
-                    last_posted  = old_post["id"]
+                    print(f"♻️ Posted revision: {old_post['id']} ({old_post['type']})")
+                    posts_sent       += 1
+                    last_posted       = old_post["id"]
+                    last_type_posted  = old_post["type"]
 
                 else:
                     print("⚠️ Archive is empty")
