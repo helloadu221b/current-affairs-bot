@@ -700,11 +700,7 @@ async def auto_post(app):
 
                     revision_label = "♻️ REVISION MCQ" if old_post.get("type") == "mcq" else "♻️ REVISION NEWS"
 
-                    await app.bot.send_message(
-                        chat_id=CHANNEL_ID,
-                        text=format_post(old_post, label=revision_label),
-                        parse_mode="Markdown"
-                    )
+                    await send_item(app.bot, old_post, label=revision_label)
                     print(f"♻️ Posted revision: {old_post['id']}")
                     posts_sent  += 1
                     last_posted  = old_post["id"]
