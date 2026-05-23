@@ -205,7 +205,7 @@ async def process_new_items(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         global posts_sent, last_posted, last_type_posted
         posts_sent       += 1
         last_posted       = first["id"]
-        last_type_posted  = first["type"]
+        last_type_posted  = first.get("type", "news")
         print(f"✅ Instantly posted: {first['id']}")
 
     await update.message.reply_text(
@@ -443,9 +443,9 @@ async def cmd_next(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global posts_sent, last_posted, last_type_posted
     posts_sent       += 1
     last_posted       = post["id"]
-    last_type_posted  = post["type"]
+    last_type_posted  = post.get("type", "news")
 
-    await update.message.reply_text(f"✅ Force posted: *{post['id']}* ({post['type'].upper()})", parse_mode="Markdown")
+    await update.message.reply_text(f"✅ Force posted: *{post['id']}* ({post.get('type', 'news').upper()})", parse_mode="Markdown")
 
 
 async def cmd_skip(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -748,11 +748,11 @@ async def auto_post(app):
                     continue
                 post = queue.pop(idx)
                 await send_item(app.bot, post)
-                print(f"✅ Posted: {post['id']} ({post['type']})")
+                print(f"✅ Posted: {post['id']} ({post.get('type', 'news')})")
                 save_json("queue.json", queue)
                 posts_sent       += 1
                 last_posted       = post["id"]
-                last_type_posted  = post["type"]
+                last_type_posted  = post.get("type", "news")
 
             else:
 
@@ -775,10 +775,10 @@ async def auto_post(app):
                     revision_label = "♻️ REVISION MCQ" if old_post.get("type") == "mcq" else "♻️ REVISION NEWS"
 
                     await send_item(app.bot, old_post, label=revision_label)
-                    print(f"♻️ Posted revision: {old_post['id']} ({old_post['type']})")
+                    print(f"♻️ Posted revision: {old_post['id']} ({old_post.get('type', 'news')})")
                     posts_sent       += 1
                     last_posted       = old_post["id"]
-                    last_type_posted  = old_post["type"]
+                    last_type_posted  = old_post.get("type", "news")
 
                 else:
                     print("⚠️ Archive is empty")
