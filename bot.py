@@ -29,6 +29,7 @@ start_time       = datetime.now(timezone.utc)
 posts_sent       = 0
 last_posted      = None
 last_type_posted = None  # tracks "mcq" or "news" to enforce alternating order
+_resume_event: asyncio.Event | None = None  # wakes the auto-post loop instantly on /resume
 
 
 # ─────────────────────────────────────────
@@ -398,8 +399,10 @@ async def cmd_resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await deny(update)
         return
 
-    global paused
+    global paused, _resume_event
     paused = False
+    if _resume_event:
+        _resume_event.set()  # wake the auto-post loop immediately, no waiting
     await update.message.reply_text("▶️ Bot resumed. Posting will continue.")
 
 
@@ -686,9 +689,22 @@ async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
 # AUTO POST LOOP
 # ─────────────────────────────────────────
 
+async def interruptible_sleep(seconds: float):
+    """Sleep for `seconds` but wake up immediately if _resume_event is set."""
+    if _resume_event:
+        _resume_event.clear()
+        try:
+            await asyncio.wait_for(_resume_event.wait(), timeout=seconds)
+        except asyncio.TimeoutError:
+            pass  # normal timeout — full interval elapsed
+    else:
+        await asyncio.sleep(seconds)
+
+
 async def auto_post(app):
 
-    global posts_sent, last_posted, last_type_posted, POST_INTERVAL
+    global posts_sent, last_posted, last_type_posted, POST_INTERVAL, _resume_event
+    _resume_event = asyncio.Event()
 
     while True:
 
@@ -714,7 +730,7 @@ async def auto_post(app):
                 # POST NEXT ITEM FROM QUEUE (alternating MCQ/news)
                 idx  = pick_alternating(queue)
                 if idx is None:
-                    await asyncio.sleep(POST_INTERVAL)
+                    await interruptible_sleep(POST_INTERVAL)
                     continue
                 post = queue.pop(idx)
                 await send_item(app.bot, post)
@@ -735,7 +751,7 @@ async def auto_post(app):
 
                     idx = pick_alternating(archive)
                     if idx is None:
-                        await asyncio.sleep(POST_INTERVAL)
+                        await interruptible_sleep(POST_INTERVAL)
                         continue
                     old_post = archive.pop(idx)
                     old_post["revision_count"] += 1
@@ -753,8 +769,8 @@ async def auto_post(app):
                 else:
                     print("⚠️ Archive is empty")
 
-            # ALERT ADMIN IF ERROR SENDS FAIL
-            await asyncio.sleep(POST_INTERVAL)
+            # WAIT FOR NEXT INTERVAL (interruptible — wakes instantly on /resume)
+            await interruptible_sleep(POST_INTERVAL)
 
         except Exception as e:
             print(f"❌ AUTO POST ERROR: {e}")
