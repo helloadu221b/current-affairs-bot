@@ -792,6 +792,8 @@ async def auto_post(app):
 # ─────────────────────────────────────────
 
 async def send_item(bot, item, label=None):
+    from telegram.error import Forbidden
+
     active_channels = get_active_channels()
 
     if not active_channels:
@@ -799,30 +801,52 @@ async def send_item(bot, item, label=None):
         return
 
     for channel in active_channels:
-        if item.get("type") == "mcq":
-            # MCQ → always send as Telegram quiz poll
-            options = item["options"]
-            correct_index = next(
-                (i for i, o in enumerate(options) if o.startswith(item["answer"][0])),
-                0
-            )
-            clean_options = [o[3:].strip() if len(o) > 3 else o for o in options]
-            await bot.send_poll(
-                chat_id=channel,
-                question=item["question"][:300],
-                options=clean_options,
-                type="quiz",
-                correct_option_id=correct_index,
-                explanation=item.get("explanation", "")[:200],
-                is_anonymous=True
-            )
-        else:
-            # NEWS → send as text message
-            await bot.send_message(
-                chat_id=channel,
-                text=format_post(item, label=label),
-                parse_mode="Markdown"
-            )
+        try:
+            if item.get("type") == "mcq":
+                # MCQ → always send as Telegram quiz poll
+                options = item["options"]
+                correct_index = next(
+                    (i for i, o in enumerate(options) if o.startswith(item["answer"][0])),
+                    0
+                )
+                clean_options = [o[3:].strip() if len(o) > 3 else o for o in options]
+                await bot.send_poll(
+                    chat_id=channel,
+                    question=item["question"][:300],
+                    options=clean_options,
+                    type="quiz",
+                    correct_option_id=correct_index,
+                    explanation=item.get("explanation", "")[:200],
+                    is_anonymous=True
+                )
+            else:
+                # NEWS → send as text message
+                await bot.send_message(
+                    chat_id=channel,
+                    text=format_post(item, label=label),
+                    parse_mode="Markdown"
+                )
+
+        except Forbidden:
+            # Bot was kicked — auto-disable this channel so it stops retrying
+            print(f"🚫 Bot was kicked from {channel}. Auto-disabling it.")
+            channels = load_channels()
+            for ch in channels:
+                if ch["id"] == channel:
+                    ch["active"] = False
+                    break
+            save_channels(channels)
+            try:
+                await bot.send_message(
+                    chat_id=ADMIN_ID,
+                    text=f"🚫 *Bot was kicked from* `{channel}`\nIt has been auto-disabled. Use /addchannel or /togglechannel to re-enable it once the bot is re-added.",
+                    parse_mode="Markdown"
+                )
+            except Exception:
+                pass
+
+        except Exception as e:
+            print(f"❌ Failed to post to {channel}: {e}")
 
 
 async def cmd_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
