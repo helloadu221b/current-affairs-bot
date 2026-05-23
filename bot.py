@@ -1,7 +1,7 @@
 import json
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from telegram import Update
 from telegram.ext import (
@@ -145,8 +145,10 @@ def pick_alternating(items):
 # SCHEDULE CHECK
 # ─────────────────────────────────────────
 
+IST = timezone(timedelta(hours=5, minutes=30))
+
 def within_posting_hours() -> bool:
-    hour = datetime.now().hour
+    hour = datetime.now(IST).hour
     return POST_HOUR_START <= hour < POST_HOUR_END
 
 
