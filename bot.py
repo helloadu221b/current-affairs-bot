@@ -1046,6 +1046,40 @@ async def cmd_requeue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def cmd_clearqueue(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    queue = load_json("queue.json")
+    count = len(queue)
+
+    if count == 0:
+        await update.message.reply_text("📭 Queue is already empty.")
+        return
+
+    save_json("queue.json", [])
+    await update.message.reply_text(f"🗑 Queue cleared. {count} post(s) removed.")
+
+
+async def cmd_cleararchive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    archive = load_json("archive.json")
+    count = len(archive)
+
+    if count == 0:
+        await update.message.reply_text("📭 Archive is already empty.")
+        return
+
+    save_json("archive.json", [])
+    await update.message.reply_text(f"🗑 Archive cleared. {count} post(s) permanently deleted.")
+
+
 # ─────────────────────────────────────────
 # START BOT
 # ─────────────────────────────────────────
@@ -1081,6 +1115,8 @@ app.add_handler(CommandHandler("archive",       cmd_archive))
 app.add_handler(CommandHandler("viewpost",      cmd_viewpost))
 app.add_handler(CommandHandler("deletepost",    cmd_deletepost))
 app.add_handler(CommandHandler("requeue",       cmd_requeue))
+app.add_handler(CommandHandler("clearqueue",    cmd_clearqueue))
+app.add_handler(CommandHandler("cleararchive",  cmd_cleararchive))
 
 # DAILY REPORT — every day at 11 PM
 app.job_queue.run_daily(
