@@ -925,17 +925,19 @@ async def cmd_archive(update: Update, context: ContextTypes.DEFAULT_TYPE):
     start = (page - 1) * ARCHIVE_PAGE_SIZE
     items = archive[start: start + ARCHIVE_PAGE_SIZE]
 
-    lines = [f"🗃 *Archive — Page {page}/{total_pages}* ({len(archive)} total)\n"]
+    lines = [f"🗃 Archive — Page {page}/{total_pages} ({len(archive)} total)\n"]
     for item in items:
-        tag  = "📊 MCQ" if item.get("type") == "mcq" else "📰 News"
-        label = item.get("question", item.get("content", ""))[:55]
-        lines.append(f"`{item['id']}` {tag}\n   _{label}..._")
+        tag   = "📊 MCQ" if item.get("type") == "mcq" else "📰 News"
+        # use `or` chain so None values don't cause TypeError
+        label = (item.get("question") or item.get("content") or "")[:55]
+        lines.append(f"{item['id']} | {tag}\n   {label}...")
 
-    if total_pages > 1:
-        lines.append(f"\nUse /archive {page + 1} for next page" if page < total_pages else "")
-        lines.append("Use /viewpost POST_ID to see full content")
+    if page < total_pages:
+        lines.append(f"\n➡️ Next: /archive {page + 1}")
+    lines.append("👁 Use /viewpost POST_ID to see full content")
 
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    # NO parse_mode — user content can break Markdown
+    await update.message.reply_text("\n".join(lines))
 
 
 async def cmd_viewpost(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -957,13 +959,26 @@ async def cmd_viewpost(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Post `{post_id}` not found in archive.", parse_mode="Markdown")
         return
 
-    preview = format_post(item)
-    header  = (
-        f"👁 *Post:* `{item['id']}`\n"
-        f"📌 *Type:* {item['type'].upper()}\n"
-        f"♻️ *Revised:* {item.get('revision_count', 0)}x\n\n"
+    header = (
+        f"👁 Post: {item['id']}\n"
+        f"📌 Type: {item.get('type', 'unknown').upper()}\n"
+        f"♻️ Revised: {item.get('revision_count', 0)}x\n"
+        f"{'─' * 30}\n"
     )
-    await update.message.reply_text(header + preview, parse_mode="Markdown")
+
+    if item.get("type") == "mcq":
+        options_text = "\n".join(item.get("options", []))
+        body = (
+            f"❓ {item.get('question', '')}\n\n"
+            f"{options_text}\n\n"
+            f"✅ Answer: {item.get('answer', '')}\n\n"
+            f"📝 {item.get('explanation', '')}"
+        )
+    else:
+        body = item.get("content", "")
+
+    # NO parse_mode — raw user content, Markdown would break on special chars
+    await update.message.reply_text(header + body)
 
 
 async def cmd_deletepost(update: Update, context: ContextTypes.DEFAULT_TYPE):
