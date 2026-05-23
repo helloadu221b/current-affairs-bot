@@ -690,15 +690,15 @@ async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
 # ─────────────────────────────────────────
 
 async def interruptible_sleep(seconds: float):
-    """Sleep for `seconds` but wake up immediately if _resume_event is set."""
-    if _resume_event:
-        _resume_event.clear()
-        try:
-            await asyncio.wait_for(_resume_event.wait(), timeout=seconds)
-        except asyncio.TimeoutError:
-            pass  # normal timeout — full interval elapsed
-    else:
-        await asyncio.sleep(seconds)
+    """Sleep for `seconds` in 2-second steps, returning early if _resume_event is set.
+    Uses simple polling — no asyncio.wait_for, so it never raises CancelledError."""
+    elapsed = 0.0
+    while elapsed < seconds:
+        if _resume_event and _resume_event.is_set():
+            _resume_event.clear()
+            return
+        await asyncio.sleep(min(2.0, seconds - elapsed))
+        elapsed += 2.0
 
 
 async def auto_post(app):
@@ -894,9 +894,26 @@ app.job_queue.run_daily(
     time=datetime.now().replace(hour=23, minute=0, second=0).time()
 )
 
-# AUTO POST LOOP
+# AUTO POST WATCHDOG — restarts auto_post if it ever crashes
+async def auto_post_watchdog(context):
+    while True:
+        try:
+            print("🔁 Starting auto_post task...")
+            await auto_post(app)
+        except Exception as e:
+            print(f"💀 auto_post crashed: {e}. Restarting in 10s...")
+            try:
+                await context.bot.send_message(
+                    chat_id=ADMIN_ID,
+                    text=f"⚠️ *Auto-post loop crashed and restarted:*\n`{e}`",
+                    parse_mode="Markdown"
+                )
+            except Exception:
+                pass
+            await asyncio.sleep(10)
+
 app.job_queue.run_once(
-    lambda context: asyncio.create_task(auto_post(app)),
+    lambda context: asyncio.create_task(auto_post_watchdog(context)),
     when=1
 )
 
