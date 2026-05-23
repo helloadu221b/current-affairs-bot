@@ -325,7 +325,15 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "━━━━━━━━━━━━━━━━━━\n"
         "♻️ *REVISION MODE*\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        "When queue is empty, old posts are reposted automatically."
+        "When queue is empty, old posts are reposted automatically.\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n"
+        "🗃 *ARCHIVE MANAGEMENT*\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "📂 /archive [page] — Browse all archived posts\n"
+        "👁 /viewpost POST\\_ID — View full content of a post\n"
+        "🗑 /deletepost POST\\_ID — Delete a post from archive\n"
+        "🔼 /requeue POST\\_ID — Move a post to front of queue"
     )
 
     await update.message.reply_text(text, parse_mode="Markdown")
@@ -349,6 +357,10 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "➕ /addchannel @name — Add channel\n"
         "🔁 /togglechannel @name — Pause/resume channel\n"
         "🗑 /removechannel @name — Remove channel\n\n"
+        "📂 /archive [page] — Browse archived posts\n"
+        "👁 /viewpost POST\\_ID — View a post\n"
+        "🗑 /deletepost POST\\_ID — Delete a post\n"
+        "🔼 /requeue POST\\_ID — Re-queue a post\n\n"
         "🆘 /help — Show this list"
     )
 
@@ -883,6 +895,143 @@ async def cmd_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ─────────────────────────────────────────
+# ARCHIVE MANAGEMENT COMMANDS
+# ─────────────────────────────────────────
+
+ARCHIVE_PAGE_SIZE = 10
+
+async def cmd_archive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    archive = load_json("archive.json")
+
+    if not archive:
+        await update.message.reply_text("📭 Archive is empty.")
+        return
+
+    # PARSE PAGE NUMBER
+    try:
+        page = int(context.args[0]) if context.args else 1
+        if page < 1:
+            page = 1
+    except ValueError:
+        page = 1
+
+    total_pages = (len(archive) + ARCHIVE_PAGE_SIZE - 1) // ARCHIVE_PAGE_SIZE
+    page = min(page, total_pages)
+    start = (page - 1) * ARCHIVE_PAGE_SIZE
+    items = archive[start: start + ARCHIVE_PAGE_SIZE]
+
+    lines = [f"🗃 *Archive — Page {page}/{total_pages}* ({len(archive)} total)\n"]
+    for item in items:
+        tag  = "📊 MCQ" if item.get("type") == "mcq" else "📰 News"
+        label = item.get("question", item.get("content", ""))[:55]
+        lines.append(f"`{item['id']}` {tag}\n   _{label}..._")
+
+    if total_pages > 1:
+        lines.append(f"\nUse /archive {page + 1} for next page" if page < total_pages else "")
+        lines.append("Use /viewpost POST_ID to see full content")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def cmd_viewpost(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /viewpost POST_ID\nExample: /viewpost POST_5")
+        return
+
+    post_id = context.args[0].upper()
+    archive = load_json("archive.json")
+
+    item = next((i for i in archive if i.get("id", "").upper() == post_id), None)
+
+    if not item:
+        await update.message.reply_text(f"❌ Post `{post_id}` not found in archive.", parse_mode="Markdown")
+        return
+
+    preview = format_post(item)
+    header  = (
+        f"👁 *Post:* `{item['id']}`\n"
+        f"📌 *Type:* {item['type'].upper()}\n"
+        f"♻️ *Revised:* {item.get('revision_count', 0)}x\n\n"
+    )
+    await update.message.reply_text(header + preview, parse_mode="Markdown")
+
+
+async def cmd_deletepost(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /deletepost POST_ID\nExample: /deletepost POST_5")
+        return
+
+    post_id = context.args[0].upper()
+    archive = load_json("archive.json")
+    queue   = load_json("queue.json")
+
+    new_archive = [i for i in archive if i.get("id", "").upper() != post_id]
+    new_queue   = [i for i in queue   if i.get("id", "").upper() != post_id]
+
+    if len(new_archive) == len(archive):
+        await update.message.reply_text(f"❌ Post `{post_id}` not found in archive.", parse_mode="Markdown")
+        return
+
+    removed_from_queue = len(new_queue) < len(queue)
+    save_json("archive.json", new_archive)
+    save_json("queue.json",   new_queue)
+
+    msg = f"🗑 Deleted `{post_id}` from archive."
+    if removed_from_queue:
+        msg += " Also removed from queue."
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+
+async def cmd_requeue(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /requeue POST_ID\nExample: /requeue POST_5")
+        return
+
+    post_id = context.args[0].upper()
+    archive = load_json("archive.json")
+    queue   = load_json("queue.json")
+
+    item = next((i for i in archive if i.get("id", "").upper() == post_id), None)
+
+    if not item:
+        await update.message.reply_text(f"❌ Post `{post_id}` not found in archive.", parse_mode="Markdown")
+        return
+
+    # CHECK IF ALREADY IN QUEUE
+    if any(i.get("id", "").upper() == post_id for i in queue):
+        await update.message.reply_text(f"⚠️ `{post_id}` is already in the queue.", parse_mode="Markdown")
+        return
+
+    queue.insert(0, item)
+    save_json("queue.json", queue)
+
+    await update.message.reply_text(
+        f"🔼 `{post_id}` moved to the *front of the queue*!\nIt will be posted on the next cycle.",
+        parse_mode="Markdown"
+    )
+
+
+# ─────────────────────────────────────────
 # START BOT
 # ─────────────────────────────────────────
 
@@ -913,6 +1062,10 @@ app.add_handler(CommandHandler("channels",      cmd_channels))
 app.add_handler(CommandHandler("addchannel",    cmd_addchannel))
 app.add_handler(CommandHandler("togglechannel", cmd_togglechannel))
 app.add_handler(CommandHandler("removechannel", cmd_removechannel))
+app.add_handler(CommandHandler("archive",       cmd_archive))
+app.add_handler(CommandHandler("viewpost",      cmd_viewpost))
+app.add_handler(CommandHandler("deletepost",    cmd_deletepost))
+app.add_handler(CommandHandler("requeue",       cmd_requeue))
 
 # DAILY REPORT — every day at 11 PM
 app.job_queue.run_daily(
