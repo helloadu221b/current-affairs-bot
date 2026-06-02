@@ -1,6 +1,7 @@
 import json
 import asyncio
 import os
+import httpx
 from datetime import datetime, timezone, timedelta
 
 from telegram import Update
@@ -15,6 +16,9 @@ from telegram.ext import (
 BOT_TOKEN  = os.environ["BOT_TOKEN"]
 CHANNEL_ID = os.environ["CHANNEL_ID"]   # used only for first-time init
 ADMIN_ID   = int(os.environ["ADMIN_ID"])
+
+GITHUB_TOKEN       = os.environ.get("GITHUB_TOKEN", "")
+GITHUB_BACKUP_REPO = os.environ.get("GITHUB_BACKUP_REPO", "")  # e.g. "youruser/backup-repo"
 
 # POSTING SCHEDULE (24h format, local server time)
 POST_HOUR_START = 4   # 4 AM
@@ -673,6 +677,135 @@ async def cmd_removechannel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🗑 Removed `{channel_id}` from the list.", parse_mode="Markdown")
 
 
+
+# ─────────────────────────────────────────
+# BACKUP HELPERS
+# ─────────────────────────────────────────
+
+async def github_backup_file(filename: str, repo_path: str) -> tuple[bool, str]:
+    """Upload a local file to the GitHub backup repo. Returns (success, message)."""
+    if not GITHUB_TOKEN or not GITHUB_BACKUP_REPO:
+        return False, "GITHUB_TOKEN or GITHUB_BACKUP_REPO env var not set."
+
+    try:
+        with open(filename, "rb") as f:
+            raw = f.read()
+    except FileNotFoundError:
+        return False, f"`{filename}` not found on disk."
+
+    import base64
+    encoded = base64.b64encode(raw).decode()
+
+    now_str   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    url       = f"https://api.github.com/repos/{GITHUB_BACKUP_REPO}/contents/{repo_path}"
+    headers   = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept":        "application/vnd.github+json",
+    }
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        # Check if file already exists (need its SHA to update)
+        sha = None
+        resp = await client.get(url, headers=headers)
+        if resp.status_code == 200:
+            sha = resp.json().get("sha")
+
+        payload = {
+            "message": f"backup: {repo_path} — {now_str}",
+            "content": encoded,
+        }
+        if sha:
+            payload["sha"] = sha
+
+        put_resp = await client.put(url, headers=headers, json=payload)
+
+    if put_resp.status_code in (200, 201):
+        return True, f"✅ `{repo_path}` backed up to GitHub."
+    else:
+        return False, f"❌ GitHub API error {put_resp.status_code}: {put_resp.text[:200]}"
+
+
+# ─────────────────────────────────────────
+# /backup COMMAND
+# ─────────────────────────────────────────
+
+async def cmd_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        await deny(update)
+        return
+
+    await update.message.reply_text("📦 Preparing backup...")
+
+    files_to_send = ["archive.json"]
+    sent, skipped = 0, 0
+
+    for filename in files_to_send:
+        try:
+            with open(filename, "rb") as f:
+                content = f.read()
+
+            if content.strip() in (b"", b"[]", b"{}"):
+                await update.message.reply_text(f"⚠️ `{filename}` is empty — skipped.")
+                skipped += 1
+                continue
+
+            await context.bot.send_document(
+                chat_id=update.effective_chat.id,
+                document=content,
+                filename=filename,
+                caption=f"📁 {filename} — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            )
+            sent += 1
+
+        except FileNotFoundError:
+            await update.message.reply_text(f"❌ `{filename}` not found on disk.")
+            skipped += 1
+        except Exception as e:
+            await update.message.reply_text(f"❌ Failed to send `{filename}`: {e}")
+            skipped += 1
+
+    summary = f"✅ Backup complete — {sent} file(s) sent."
+    if skipped:
+        summary += f" {skipped} skipped."
+    await update.message.reply_text(summary)
+
+
+# ─────────────────────────────────────────
+# AUTOMATIC GITHUB BACKUP (daily at 2 AM)
+# ─────────────────────────────────────────
+
+async def auto_github_backup(context: ContextTypes.DEFAULT_TYPE):
+    """Runs every day at 02:00 server time. Uploads archive.json to GitHub backup repo."""
+    print("🔄 Running scheduled GitHub backup...")
+
+    if not GITHUB_TOKEN or not GITHUB_BACKUP_REPO:
+        print("⚠️ GitHub backup skipped — GITHUB_TOKEN or GITHUB_BACKUP_REPO not configured.")
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text="⚠️ *GitHub Backup Skipped*\n\nSet `GITHUB_TOKEN` and `GITHUB_BACKUP_REPO` env vars to enable automatic backups.",
+                parse_mode="Markdown",
+            )
+        except Exception:
+            pass
+        return
+
+    results = []
+    for filename in ["archive.json"]:
+        ok, msg = await github_backup_file(filename, filename)
+        results.append(msg)
+        print(msg)
+
+    report = "🗄 *Daily GitHub Backup*\n\n" + "\n".join(results)
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=report,
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        print(f"Failed to send backup report: {e}")
+
 # ─────────────────────────────────────────
 # DAILY REPORT
 # ─────────────────────────────────────────
@@ -1117,11 +1250,18 @@ app.add_handler(CommandHandler("deletepost",    cmd_deletepost))
 app.add_handler(CommandHandler("requeue",       cmd_requeue))
 app.add_handler(CommandHandler("clearqueue",    cmd_clearqueue))
 app.add_handler(CommandHandler("cleararchive",  cmd_cleararchive))
+app.add_handler(CommandHandler("backup",        cmd_backup))
 
 # DAILY REPORT — every day at 11 PM
 app.job_queue.run_daily(
     send_daily_report,
     time=datetime.now().replace(hour=23, minute=0, second=0).time()
+)
+
+# GITHUB BACKUP — every day at 2 AM
+app.job_queue.run_daily(
+    auto_github_backup,
+    time=datetime.now().replace(hour=2, minute=0, second=0).time()
 )
 
 # AUTO POST WATCHDOG — restarts auto_post if it ever crashes
