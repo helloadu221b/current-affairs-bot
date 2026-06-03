@@ -18,7 +18,7 @@ CHANNEL_ID = os.environ["CHANNEL_ID"]   # used only for first-time init
 ADMIN_ID   = int(os.environ["ADMIN_ID"])
 
 GITHUB_TOKEN       = os.environ.get("GITHUB_TOKEN", "")
-GITHUB_BACKUP_REPO = os.environ.get("GITHUB_BACKUP_REPO", "")   # e.g. "youruser/backup-repo"
+GITHUB_BACKUP_REPO = os.environ.get("GITHUB_BACKUP_REPO", "").rstrip("/").replace("https://github.com/", "").replace("http://github.com/", "")
 GITHUB_BACKUP_PATH = os.environ.get("GITHUB_BACKUP_PATH", "")   # e.g. "currentaffairs" — subfolder inside the repo
 
 # POSTING SCHEDULE (24h format, local server time)
