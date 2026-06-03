@@ -916,7 +916,18 @@ async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
         text=report,
         parse_mode="Markdown"
     )
-    print("📅 Daily report sent to admin")
+
+    # Attach archive.json with today's date in the filename
+    today = datetime.now().strftime("%Y-%m-%d")
+    filename = f"archive_{today}.json"
+    archive_bytes = json.dumps(archive, ensure_ascii=False, indent=2).encode("utf-8")
+    await context.bot.send_document(
+        chat_id=ADMIN_ID,
+        document=archive_bytes,
+        filename=filename,
+        caption=f"📦 Archive backup — {today}"
+    )
+    print("📅 Daily report + archive sent to admin")
 
 
 # ─────────────────────────────────────────
