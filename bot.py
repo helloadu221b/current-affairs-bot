@@ -752,9 +752,12 @@ async def github_backup_file(filename: str) -> tuple[bool, str]:
         put_resp = await client.put(url, headers=headers, json=payload)
 
     if put_resp.status_code in (200, 201):
-        return True, f"✅ `{repo_path}` backed up to GitHub."
+        return True, f"✅ Backed up to: {GITHUB_BACKUP_REPO}/{repo_path}"
+    elif put_resp.status_code == 404:
+        return False, f"❌ Repo not found: '{GITHUB_BACKUP_REPO}'. Make sure it exists on GitHub and your token has 'repo' scope."
     else:
-        return False, f"❌ GitHub API error {put_resp.status_code}: {put_resp.text[:200]}"
+        err = put_resp.text[:300].replace("`", "'")
+        return False, f"❌ GitHub API error {put_resp.status_code}: {err}"
 
 
 # ─────────────────────────────────────────
@@ -823,9 +826,9 @@ async def auto_github_backup(context: ContextTypes.DEFAULT_TYPE):
         return
 
     results = await _run_github_backup()
-    report  = "🗄 *Daily GitHub Backup*\n\n" + "\n".join(results)
+    report  = "🗄 Daily GitHub Backup\n\n" + "\n".join(results)
     try:
-        await context.bot.send_message(chat_id=ADMIN_ID, text=report, parse_mode="Markdown")
+        await context.bot.send_message(chat_id=ADMIN_ID, text=report)
     except Exception as e:
         print(f"⚠️ Could not send backup report to admin: {e}")
 
@@ -858,7 +861,7 @@ async def cmd_githubbackup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🐙 Pushing backup to GitHub...")
     results = await _run_github_backup()
-    await update.message.reply_text("🗄 *GitHub Backup Result*\n\n" + "\n".join(results), parse_mode="Markdown")
+    await update.message.reply_text("🗄 GitHub Backup Result\n\n" + "\n".join(results))
 
 
 async def cmd_restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
