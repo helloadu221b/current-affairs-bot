@@ -1363,5 +1363,13 @@ app.job_queue.run_once(
     when=1
 )
 
+# ── Startup: remove permanently banned channels ──
+_BANNED_CHANNELS = {"@newsofexams"}
+_ch = load_channels()
+_cleaned = [c for c in _ch if c.get("id") not in _BANNED_CHANNELS]
+if len(_cleaned) != len(_ch):
+    save_channels(_cleaned)
+    print(f"🧹 Removed banned channels on startup: {_BANNED_CHANNELS}")
+
 print("🚀 Bot is running...")
 app.run_polling()
