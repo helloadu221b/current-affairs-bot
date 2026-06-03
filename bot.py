@@ -365,7 +365,16 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📂 /archive [page] — Browse all archived posts\n"
         "👁 /viewpost POST\\_ID — View full content of a post\n"
         "🗑 /deletepost POST\\_ID — Delete a post from archive\n"
-        "🔼 /requeue POST\\_ID — Move a post to front of queue"
+        "🔼 /requeue POST\\_ID — Move a post to front of queue\n"
+        "🗑 /cleararchive — Permanently delete all archived posts\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n"
+        "💾 *BACKUP & RESTORE*\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "📦 /backup — Send archive.json file to this chat\n"
+        "♻️ /restore — Replace archive with an uploaded file\n"
+        "🐙 /githubbackup — Push archive to GitHub now\n"
+        "⏰ Auto GitHub backup also runs daily at 2 AM"
     )
 
     await update.message.reply_text(text, parse_mode="Markdown")
@@ -393,7 +402,11 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📂 /archive [page] — Browse archived posts\n"
         "👁 /viewpost POST\\_ID — View a post\n"
         "🗑 /deletepost POST\\_ID — Delete a post\n"
-        "🔼 /requeue POST\\_ID — Re-queue a post\n\n"
+        "🔼 /requeue POST\\_ID — Re-queue a post\n"
+        "🗑 /cleararchive — Delete all archived posts\n\n"
+        "💾 /backup — Send archive.json to this chat\n"
+        "♻️ /restore — Replace archive with an uploaded file\n"
+        "🐙 /githubbackup — Push archive to GitHub now\n\n"
         "🆘 /help — Show this list"
     )
 
